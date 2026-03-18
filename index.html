@@ -1544,11 +1544,9 @@ function exportRegistroClaseCSV() {
   allLogs.sort((a, b) => b.date.localeCompare(a.date));
   if (!allLogs.length) { showToast('No hay registros para exportar', 'error'); return; }
 
-  let csv = 'Fecha;Nivel;Electivo;Grupo;Objetivo;Temas;Observaciones
-';
+  let csv = 'Fecha;Nivel;Electivo;Grupo;Objetivo;Temas;Observaciones\n';
   allLogs.forEach(log => {
-    csv += `${log.date};"${log.nivel}° Medio";"${log.asignatura}";"${log.grupo}";"${log.objetivo.replace(/"/g,'""')}";"${log.temas.replace(/"/g,'""')}";"${log.obs.replace(/"/g,'""')}"
-`;
+    csv += log.date + ';"' + log.nivel + '° Medio";"' + log.asignatura + '";"' + log.grupo + '";"' + log.objetivo.replace(/"/g,'""') + '";"' + log.temas.replace(/"/g,'""') + '";"' + log.obs.replace(/"/g,'""') + '"\n';
   });
 
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
