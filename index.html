@@ -329,7 +329,7 @@ create policy "own_data" on app_data
       <div class="setup-field">
         <label>Anon Public Key</label>
         <input type="text" id="sbKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
-        <p class="setup-hint">La clave larga que empieza con "eyJ..."</p>
+        <p class="setup-hint">La clave que empieza con "eyJ..." o "sb_publishable_..."</p>
       </div>
       <div id="setupError" class="login-error" style="display:none"></div>
       <div class="setup-actions">
@@ -675,7 +675,7 @@ function saveSupabaseSetup() {
 
   if (!url || !key) { errEl.textContent = 'Completa la URL y la clave.'; errEl.style.display = 'block'; return; }
   if (!url.startsWith('https://')) { errEl.textContent = 'La URL debe empezar con https://'; errEl.style.display = 'block'; return; }
-  if (!key.startsWith('eyJ')) { errEl.textContent = 'La clave no parece válida (debe empezar con eyJ...).'; errEl.style.display = 'block'; return; }
+  if (!key.startsWith('eyJ') && !key.startsWith('sb_publishable_') && !key.startsWith('sb_')) { errEl.textContent = 'La clave no parece válida.'; errEl.style.display = 'block'; return; }
 
   localStorage.setItem('supabaseConfig', JSON.stringify({ url, key }));
   localStorage.removeItem('localMode');
