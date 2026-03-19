@@ -820,7 +820,7 @@ async function startCloudMode(user) {
   // CARGA: localStorage primero, Supabase solo si localStorage está vacío
   const hayLocal = loadLocalStorage();
 
-  if (hayLocal) {
+  if (hayLocal && state.groups.length > 0) {
     console.log('✓ Datos desde localStorage:', state.groups.length, 'grupos');
     // Sincronizar a Supabase en background (sin bloquear la UI)
     saveData();
