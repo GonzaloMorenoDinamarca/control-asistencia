@@ -1264,7 +1264,8 @@ function updateAttendance() {
     ['totalCard','presentCard','absentCard','lateCard'].forEach(id=>document.getElementById(id).textContent='0');return;
   }
   let present=0,absent=0,late=0;
-  tbody.innerHTML=g.estudiantes.map((e,i)=>{
+  const estudiantesOrdenados=[...g.estudiantes].sort((a,b)=>{const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});
+  tbody.innerHTML=estudiantesOrdenados.map((e,i)=>{
     const status=getAtt(g.id,e.id,state.currentDate);
     if(status==='present')present++;else if(status==='absent')absent++;else if(status==='late')late++;
     const dates=Object.keys(g.asistencia||{});const p=dates.filter(d=>getAtt(g.id,e.id,d)==='present').length;const rec=dates.filter(d=>getAtt(g.id,e.id,d)!=null).length;const isLow=rec>=3&&(p/rec)<0.75;
