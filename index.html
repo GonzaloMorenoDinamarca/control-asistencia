@@ -293,70 +293,6 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
 </head>
 <body>
 
-<!-- SETUP SUPABASE -->
-<div id="setupScreen" class="screen">
-  <div class="setup-bg">
-    <div class="setup-card">
-      <h2>🟢 Configurar Supabase</h2>
-      <p class="setup-subtitle">
-        Supabase es una alternativa gratuita a Firebase, más simple y confiable.
-        Solo necesitas configurarlo una vez — completamente gratuito hasta 500MB.
-      </p>
-      <div class="setup-steps">
-        <div class="setup-step">
-          <div class="setup-step-num">1</div>
-          <div class="setup-step-text">
-            Ve a <a href="https://supabase.com" target="_blank">supabase.com</a> → <strong>Start for free</strong> → inicia sesión con GitHub o Google.
-          </div>
-        </div>
-        <div class="setup-step">
-          <div class="setup-step-num">2</div>
-          <div class="setup-step-text">
-            Clic en <strong>"New project"</strong>. Nombre: <code>asistencia-liceo</code>. Elige una contraseña para la base de datos y selecciona región <code>South America (São Paulo)</code>. Espera ~2 minutos.
-          </div>
-        </div>
-        <div class="setup-step">
-          <div class="setup-step-num">3</div>
-          <div class="setup-step-text">
-            Ve a <strong>SQL Editor</strong> (menú lateral) → <strong>New query</strong> → pega y ejecuta este código:
-            <div class="sql-box">create table if not exists app_data (
-  id uuid references auth.users on delete cascade primary key,
-  state jsonb default '{}',
-  updated_at timestamptz default now()
-);
-alter table app_data enable row level security;
-create policy "own_data" on app_data
-  for all using (auth.uid() = id)
-  with check (auth.uid() = id);</div>
-            Luego haz clic en <strong>RUN</strong> (▶).
-          </div>
-        </div>
-        <div class="setup-step">
-          <div class="setup-step-num">4</div>
-          <div class="setup-step-text">
-            Ve a <strong>Project Settings → API</strong>. Copia la <strong>Project URL</strong> y la <strong>anon public key</strong> y pégalas abajo.
-          </div>
-        </div>
-      </div>
-      <div class="setup-field">
-        <label>Project URL</label>
-        <input type="text" id="sbUrl" placeholder="https://xyzxyzxyz.supabase.co">
-        <p class="setup-hint">Ejemplo: https://abcdefghij.supabase.co</p>
-      </div>
-      <div class="setup-field">
-        <label>Anon Public Key</label>
-        <input type="text" id="sbKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
-        <p class="setup-hint">La clave que empieza con "eyJ..." o "sb_publishable_..."</p>
-      </div>
-      <div id="setupError" class="login-error" style="display:none"></div>
-      <div class="setup-actions">
-        <button class="btn-setup" onclick="saveSupabaseSetup()">Guardar y continuar →</button>
-        <button class="btn-setup-skip" onclick="startLocalMode()">📱 Usar sin cuenta (solo este dispositivo)</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- LOGIN -->
 <div id="loginScreen" class="screen">
   <div class="login-bg">
@@ -396,9 +332,7 @@ create policy "own_data" on app_data
         </div>
         <button class="btn-login" onclick="doRegister()">Crear Cuenta</button>
       </div>
-      <div class="login-setup-link">
-        <a onclick="showScreen('setupScreen')">⚙️ Reconfigurar Supabase</a>
-      </div>
+
     </div>
   </div>
 </div>
@@ -1037,7 +971,12 @@ function renderCalificaciones() {
     ? `<span style="font-size:11px;color:var(--accent);background:var(--accent-bg);padding:2px 8px;border-radius:5px;margin-left:8px">Curso: ${escapeHtml(cursoFiltro)}</span>`
     : (modoTodos ? `<span style="font-size:11px;color:var(--text3);background:var(--bg3);padding:2px 8px;border-radius:5px;margin-left:8px">Todos los grupos del nivel</span>` : '');
   // Mostrar columna Grupo cuando hay múltiples grupos (modo todos o filtro de curso con varios grupos)
-  const mostrarGrupo = modoTodos || grupos.length > 1;
+  // Mostrar columna Grupo cuando: modo todos, O cuando hay filtro de curso activo
+  // (para ver de qué grupo viene cada estudiante del mismo curso)
+  const gruposConEstudiantes = modoTodos
+    ? state.groups.filter(g => g.nivel === state.currentNivel && g.estudiantes.some(e => !cursoFiltro || e.c === cursoFiltro))
+    : grupos;
+  const mostrarGrupo = modoTodos || (cursoFiltro && gruposConEstudiantes.length >= 1);
   let html = `<table class="grades-table"><thead><tr>
     <th class="th-name" style="width:28px">#</th>
     <th class="th-name">Apellidos ${filtroInfo}</th>
@@ -1603,18 +1542,24 @@ function initAppUI() {
 // ═══════════════════════════════════════════════════════════
 window.chartInstances = {};
 
+// ═══════════════════════════════════════════════════════════
+//  CREDENCIALES SUPABASE (incrustadas directamente)
+// ═══════════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://zeeifjoiqlotltsckfii.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_LT1f75UiZEoR_Fv8xVIK-w_n_dB6FKf';
+
 document.addEventListener('DOMContentLoaded', async () => {
   // ¿Modo local?
   if (localStorage.getItem('localMode') === 'true') { startLocalMode(); return; }
 
-  // ¿Configuración Supabase?
-  const config = getSupabaseConfig();
-  if (!config) { showScreen('setupScreen'); return; }
+  // Inicializar Supabase con credenciales incrustadas
+  if (!initSupabase(SUPABASE_URL, SUPABASE_KEY)) {
+    showToast('Error al conectar con Supabase', 'error');
+    startLocalMode();
+    return;
+  }
 
-  // Inicializar Supabase
-  if (!initSupabase(config.url, config.key)) { showScreen('setupScreen'); return; }
-
-  // Verificar sesión activa (si el docente ya inició sesión antes)
+  // Verificar sesión activa
   const { data: { session } } = await sbClient.auth.getSession();
   if (session?.user) {
     await startCloudMode(session.user);
