@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asistencia-v5';
+const CACHE_NAME = 'asistencia-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -28,7 +28,7 @@ self.addEventListener('fetch', event => {
   const url = event.request.url;
   if (url.includes('supabase.co')) return;
 
-  // Para index.html: siempre buscar en red primero, caché como respaldo
+  // index.html siempre desde la red
   if (url.endsWith('/') || url.endsWith('index.html')) {
     event.respondWith(
       fetch(event.request)
