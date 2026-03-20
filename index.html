@@ -204,14 +204,14 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
 .grade-col-del:hover{opacity:1;background:var(--red-bg)}
 .grade-col-rename{width:18px;height:18px;border-radius:4px;border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;opacity:.5;transition:opacity .15s}
 .grade-col-rename:hover{opacity:1;background:var(--bg4)}
-.grade-input{width:52px;padding:3px 4px;text-align:center;border-radius:5px;border:1.2px solid var(--border);background:var(--bg3);color:var(--text);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;transition:border-color .15s;-moz-appearance:textfield;appearance:textfield}
+.grade-input{width:56px;padding:4px 4px;text-align:center;border-radius:5px;border:1.2px solid var(--border);background:var(--bg3);color:var(--text);font-family:'Space Mono',monospace;font-size:14px;font-weight:700;transition:border-color .15s;-moz-appearance:textfield;appearance:textfield}
 .grade-input::-webkit-outer-spin-button,.grade-input::-webkit-inner-spin-button{-webkit-appearance:none}
 .grade-input:focus{outline:none;border-color:var(--accent);background:var(--bg4)}
 .grade-input.g-red{color:var(--red);border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.06)}
 .grade-input.g-yellow{color:var(--yellow);border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06)}
 .grade-input.g-blue{color:var(--accent);border-color:rgba(79,140,255,.3);background:rgba(79,140,255,.06)}
 .grade-input.g-green{color:var(--green);border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.06)}
-.grade-badge{display:inline-flex;align-items:center;justify-content:center;min-width:44px;padding:3px 7px;border-radius:5px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700}
+.grade-badge{display:inline-flex;align-items:center;justify-content:center;min-width:48px;padding:4px 8px;border-radius:5px;font-family:'Space Mono',monospace;font-size:14px;font-weight:700}
 .grade-badge.g-red{color:var(--red);background:var(--red-bg)}
 .grade-badge.g-yellow{color:var(--yellow);background:var(--yellow-bg)}
 .grade-badge.g-blue{color:var(--accent);background:var(--accent-bg)}
@@ -355,6 +355,8 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
         <div class="user-dot"></div>
         <span id="userEmailText" class="user-email-text">local</span>
       </div>
+      <button class="theme-btn" id="backupBtn" title="Descargar backup" onclick="downloadBackup()">💾</button>
+      <button class="theme-btn" id="restoreBtn" title="Restaurar backup" onclick="triggerRestore()">📂</button>
       <button class="theme-btn" id="themeBtn" title="Cambiar tema">☀️</button>
       <button class="logout-btn" onclick="doLogout()" title="Cerrar sesión">↩</button>
     </div>
@@ -926,7 +928,12 @@ function setGrade(studentId, colId, value) {
   const g = getCurrentGroup(); if (!g) return;
   const cal = getCalificaciones(g);
   if (!cal.data[studentId]) cal.data[studentId] = {};
-  const num = parseFloat(value);
+  let v = String(value).trim().replace(',', '.');
+  // Convertir enteros sin punto: 52 → 5.2, 70 → 7.0, 10 → 1.0
+  if (/^\d{2}$/.test(v)) {
+    v = v[0] + '.' + v[1];
+  }
+  const num = parseFloat(v);
   if (!isNaN(num) && num >= 1.0 && num <= 7.0) cal.data[studentId][colId] = Math.round(num*10)/10;
   else delete cal.data[studentId][colId];
   updatePromedio(studentId); debouncedSave();
@@ -1334,7 +1341,7 @@ function renderStats() {
   <div class="cards-grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));margin-bottom:20px">`;
   dates.forEach(date=>{let p=0,a=0,l=0;cg.estudiantes.forEach(e=>{const s=getAtt(cg.id,e.id,date);if(s==='present')p++;else if(s==='absent')a++;else if(s==='late')l++;});const cls=a===0&&l===0?'green':a>0?'red':'yellow';
     html+=`<div class="card ${cls}" style="cursor:pointer" onclick="state.currentDate='${date}';updateUI();document.querySelector('[data-view=asistencia]').click()">
-      <div class="card-value" style="font-size:14px">${new Date(date).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'})}</div>
+      <div class="card-value" style="font-size:14px">${new Date(date+'T12:00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'})}</div>
       <div style="font-size:10px;color:var(--text3);margin-top:3px">P:${p} A:${a} T:${l}</div>
     </div>`;
   });
@@ -1362,7 +1369,7 @@ function updateDashboard() {
   if(pieCtx)window.chartInstances.pie=new Chart(pieCtx,{type:'doughnut',data:{labels:['Presentes','Ausentes','Atrasos'],datasets:[{data:[tp,ta,tl],backgroundColor:['#34d399','#f87171','#fbbf24'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'var(--text)',font:{size:13}}}}}});
   if(window.chartInstances?.line)window.chartInstances.line.destroy();
   const lineCtx=document.getElementById('lineChart');
-  if(lineCtx){const dl=dates.slice(-10);const attPct=dl.map(d=>{const p=cg.estudiantes.filter(e=>getAtt(cg.id,e.id,d)==='present').length;return cg.estudiantes.length?Math.round(p/cg.estudiantes.length*100):0;});window.chartInstances.line=new Chart(lineCtx,{type:'line',data:{labels:dl.map(d=>new Date(d).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'})),datasets:[{label:'Asistencia %',data:attPct,borderColor:'#4f8cff',backgroundColor:'rgba(79,140,255,.1)',borderWidth:2,fill:true,tension:.4,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'var(--text)',font:{size:12}}}},scales:{y:{min:0,max:100,ticks:{color:'var(--text3)',font:{size:11}},grid:{color:'var(--border)'}},x:{ticks:{color:'var(--text3)',font:{size:11}},grid:{color:'var(--border)'}}}}});}
+  if(lineCtx){const dl=dates.slice(-10);const attPct=dl.map(d=>{const p=cg.estudiantes.filter(e=>getAtt(cg.id,e.id,d)==='present').length;return cg.estudiantes.length?Math.round(p/cg.estudiantes.length*100):0;});window.chartInstances.line=new Chart(lineCtx,{type:'line',data:{labels:dl.map(d=>new Date(d+'T12:00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'})),datasets:[{label:'Asistencia %',data:attPct,borderColor:'#4f8cff',backgroundColor:'rgba(79,140,255,.1)',borderWidth:2,fill:true,tension:.4,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'var(--text)',font:{size:12}}}},scales:{y:{min:0,max:100,ticks:{color:'var(--text3)',font:{size:11}},grid:{color:'var(--border)'}},x:{ticks:{color:'var(--text3)',font:{size:11}},grid:{color:'var(--border)'}}}}});}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1495,6 +1502,72 @@ function exportRegistroClaseCSV() {
   a.download = `registro_clases_${localDateStr()}.csv`;
   a.click();
   showToast('Registro exportado', 'success');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BACKUP Y RESTAURACIÓN
+// ═══════════════════════════════════════════════════════════
+function downloadBackup() {
+  const backup = {
+    version: 1,
+    fecha: localDateStr(),
+    timestamp: new Date().toISOString(),
+    state: state
+  };
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `backup_asistencia_${localDateStr()}.json`;
+  a.click();
+  showToast('Backup descargado correctamente', 'success');
+}
+
+function triggerRestore() {
+  if (!confirm('⚠️ ¿Restaurar backup?\n\nEsto reemplazará TODOS los datos actuales con los del archivo de backup.\n\n¿Estás seguro?')) return;
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json';
+  inp.onchange = handleRestoreFile;
+  inp.click();
+}
+
+async function handleRestoreFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+
+    // Validar estructura del backup
+    if (!backup.state || !Array.isArray(backup.state.groups)) {
+      showToast('Archivo de backup inválido', 'error');
+      return;
+    }
+
+    if (!validateState(backup.state)) {
+      showToast('El backup no tiene un formato válido', 'error');
+      return;
+    }
+
+    const nGrupos = backup.state.groups.length;
+    const fecha = backup.fecha || 'desconocida';
+
+    if (!confirm(`¿Restaurar backup del ${fecha} con ${nGrupos} grupo(s)?\n\nSe reemplazarán todos los datos actuales.`)) return;
+
+    // Restaurar estado
+    state = backup.state;
+    state.currentDate = localDateStr(); // Siempre fecha de hoy
+
+    // Guardar en localStorage y Supabase
+    await saveDataNow();
+    updateUI();
+    showToast(`✓ Backup restaurado: ${nGrupos} grupos`, 'success');
+
+  } catch(e) {
+    showToast('Error al leer el backup: ' + e.message, 'error');
+  }
+  event.target.value = '';
 }
 
 function toggleTheme(){state.theme=state.theme==='dark'?'light':'dark';setTheme(state.theme);saveData();}
