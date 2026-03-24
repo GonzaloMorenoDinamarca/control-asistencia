@@ -140,6 +140,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .btn-danger{background:var(--red-bg);border-color:var(--red);color:var(--red)}
 .btn-danger:hover{opacity:.8}
 .btn-sm{padding:5px 9px;font-size:12px}
+.btn-active{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-active:hover{background:var(--accent2);border-color:var(--accent2)}
 .cards-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;flex-shrink:0}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center}
 .card-value{font-size:18px;font-weight:700;font-family:'Space Mono',monospace;line-height:1;margin-bottom:1px}
@@ -375,6 +377,7 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
           <input type="date" id="datePicker" class="date-input">
           <button class="btn btn-primary btn-sm" id="importPdfBtn">📄 Importar PDF</button>
           <button class="btn btn-sm" id="addStudentBtn">➕ Estudiante</button>
+          <button class="btn btn-sm" id="sortCursoBtn" title="Ordenar por curso y apellido">⇅ Curso</button>
           <button class="btn btn-sm" id="allPresentBtn">✓ Todos P</button>
           <button class="btn btn-sm" id="csvExportBtn">↓ CSV</button>
           <button class="btn btn-sm" id="csvImportBtn">↑ CSV</button>
@@ -565,7 +568,8 @@ let state = {
   currentNivel: null,
   currentGroupId: null,
   currentDate: localDateStr(),
-  theme: 'dark'
+  theme: 'dark',
+  sortByCurso: false
 };
 let sbClient    = null;   // Supabase client
 let currentUser = null;
@@ -1271,7 +1275,10 @@ function updateAttendance() {
     ['totalCard','presentCard','absentCard','lateCard'].forEach(id=>document.getElementById(id).textContent='0');return;
   }
   let present=0,absent=0,late=0;
-  const estudiantesOrdenados=[...g.estudiantes].sort((a,b)=>{const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});
+  const estudiantesOrdenados=[...g.estudiantes].sort((a,b)=>{
+    if(state.sortByCurso){const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;}
+    const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');
+  });
   tbody.innerHTML=estudiantesOrdenados.map((e,i)=>{
     const status=getAtt(g.id,e.id,state.currentDate);
     if(status==='present')present++;else if(status==='absent')absent++;else if(status==='late')late++;
@@ -1593,6 +1600,13 @@ function initAppUI() {
   document.getElementById('datePicker').addEventListener('change',e=>{state.currentDate=e.target.value;updateAttendance();updateClassLogPreview();saveData();});
   document.getElementById('importPdfBtn').addEventListener('click',()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.pdf';inp.onchange=handlePDFUpload;inp.click();});
   document.getElementById('addStudentBtn').addEventListener('click',showAddStudentModal);
+  document.getElementById('sortCursoBtn').addEventListener('click',()=>{
+    state.sortByCurso=!state.sortByCurso;
+    const btn=document.getElementById('sortCursoBtn');
+    btn.classList.toggle('btn-active',state.sortByCurso);
+    btn.textContent=state.sortByCurso?'⇅ Curso ✓':'⇅ Curso';
+    updateAttendance();
+  });
   document.getElementById('allPresentBtn').addEventListener('click',()=>{const g=getCurrentGroup();if(!g)return;g.estudiantes.forEach(e=>{if(!g.asistencia)g.asistencia={};if(!g.asistencia[state.currentDate])g.asistencia[state.currentDate]={};g.asistencia[state.currentDate][e.id]='present';});saveData();updateAttendance();});
   document.getElementById('csvExportBtn').addEventListener('click',exportToCSV);
   document.getElementById('csvImportBtn').addEventListener('click',()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.csv';inp.onchange=handleCSVImport;inp.click();});
