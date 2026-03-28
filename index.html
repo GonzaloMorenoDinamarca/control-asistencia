@@ -1,19 +1,4 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Notas</title><style>'+css+'</style></head><body>'
-    +'<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>'
-    +'<div class="header"><div class="header-left"><div class="header-title">Libro de Notas \u2014 '+esc(titulo)+'</div><div class="header-sub">Liceo A-1 \u00b7 Arica \u00b7 Control de Asistencia y Notas</div></div>'
-    +'<div class="header-right"><strong>'+today+'</strong><br>'+estudiantes.length+' estudiante'+(estudiantes.length!==1?'s':'')+' \u00b7 '+cols.length+' evaluaci\u00f3n'+(cols.length!==1?'es':'')+'</div></div>'
-    +'<div class="filter-bar"><span>Filtro: <strong>'+esc(filtroLabel)+'</strong></span><span>gonzaloamorenod@gmail.com</span></div>'
-    +'<table><thead><tr><th style="width:24px">#</th><th class="th-left" style="min-width:130px">Apellidos</th><th class="th-left">Nombres</th><th style="width:50px">Curso</th>'
-    +(modoTodos?'<th style="width:80px">Grupo</th>':'')
-    +cols.map(c=>'<th style="width:42px">'+esc(c.name)+(c.date?'<br><span style="font-weight:400;font-size:6.5pt;opacity:.8">'+fmtD(c.date)+'</span>':'')+'</th>').join('')
-    +'<th style="width:50px;background:#1d4ed8">Prom.</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +'<div class="footer"><span>Control de Asistencia y Notas \u00b7 gonzaloamorenod.github.io</span><span>Generado: '+today+'</span></div>'
-    +'</body></html>';
-  const w=window.open('','_blank','width=1100,height=750');
-  if(!w){showToast('Permite ventanas emergentes para exportar','error');return;}
-  w.document.write(html);w.document.close();
-  showToast('PDF de notas listo','success');
-}<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
 <meta charset="UTF-8">
