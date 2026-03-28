@@ -772,7 +772,7 @@ function loadLocalStorage() {
 // Guardar en localStorage DE INMEDIATO + Supabase en background
 function saveData() {
   // 1) localStorage — instantáneo, nunca falla
-  try { localStorage.setItem('asistenciaState', JSON.stringify(state)); } catch(e) {}
+  try { const now=new Date().toISOString(); localStorage.setItem('asistenciaState', JSON.stringify(state)); localStorage.setItem('asistenciaStateUpdatedAt', now); } catch(e) {}
   showSaveIndicator();
 
   // 2) Supabase — con debounce de 800ms para no saturar
@@ -795,7 +795,7 @@ function saveData() {
 // Guardar en Supabase AHORA (sin debounce) para operaciones críticas
 async function saveDataNow() {
   // 1) localStorage primero
-  try { localStorage.setItem('asistenciaState', JSON.stringify(state)); } catch(e) {}
+  try { const now=new Date().toISOString(); localStorage.setItem('asistenciaState', JSON.stringify(state)); localStorage.setItem('asistenciaStateUpdatedAt', now); } catch(e) {}
   showSaveIndicator();
 
   // 2) Supabase inmediato
@@ -823,27 +823,49 @@ async function startCloudMode(user) {
   const badge = document.getElementById('userBadge');
   if (badge) { badge.classList.remove('local'); document.getElementById('userEmailText').textContent = user.email; }
 
-  // CARGA: localStorage primero, Supabase solo si localStorage está vacío
-  const hayLocal = loadLocalStorage();
+  // ESTRATEGIA CORRECTA:
+  // Siempre consultar Supabase al iniciar sesion (fuente de verdad compartida).
+  // Comparar timestamps con localStorage y usar el mas reciente.
+  // Solo usar localStorage como fallback si Supabase falla o esta offline.
 
-  if (hayLocal && state.groups.length > 0) {
-    console.log('✓ Datos desde localStorage:', state.groups.length, 'grupos');
-    // Sincronizar a Supabase en background (sin bloquear la UI)
-    saveData();
+  let cloudState = null;
+  let cloudUpdatedAt = null;
+
+  try {
+    const { data, error } = await sbClient.from('app_data')
+      .select('state, updated_at').eq('id', user.id).single();
+    if (!error && data && validateState(data.state)) {
+      cloudState = data.state;
+      cloudUpdatedAt = data.updated_at ? new Date(data.updated_at) : null;
+      console.log('Datos desde Supabase:', cloudState.groups.length, 'grupos');
+    }
+  } catch(e) { console.warn('Error consultando Supabase (se usara localStorage):', e); }
+
+  const hayLocal = loadLocalStorage();
+  let localUpdatedAt = null;
+  try {
+    const meta = localStorage.getItem('asistenciaStateUpdatedAt');
+    if (meta) localUpdatedAt = new Date(meta);
+  } catch(e) {}
+
+  if (cloudState) {
+    const cloudNewer = !localUpdatedAt || !cloudUpdatedAt || cloudUpdatedAt >= localUpdatedAt;
+    if (cloudNewer) {
+      console.log('Usando datos de Supabase (mas recientes)');
+      state = cloudState;
+      try {
+        localStorage.setItem('asistenciaState', JSON.stringify(state));
+        localStorage.setItem('asistenciaStateUpdatedAt', (cloudUpdatedAt || new Date()).toISOString());
+      } catch(e) {}
+    } else {
+      console.log('Usando datos de localStorage (mas recientes), sincronizando a Supabase...');
+      await saveDataNow();
+    }
+  } else if (hayLocal && state.groups.length > 0) {
+    console.log('Sin datos en Supabase, subiendo localStorage...');
+    await saveDataNow();
   } else {
-    // Sin datos locales → buscar en Supabase
-    console.log('localStorage vacío, consultando Supabase...');
-    try {
-      const { data, error } = await sbClient.from('app_data')
-        .select('state').eq('id', user.id).single();
-      if (!error && data && validateState(data.state)) {
-        state = data.state;
-        try { localStorage.setItem('asistenciaState', JSON.stringify(state)); } catch(e) {}
-        console.log('✓ Datos desde Supabase:', state.groups.length, 'grupos');
-      } else {
-        console.log('Sin datos en Supabase, iniciando en blanco');
-      }
-    } catch(e) { console.warn('Error consultando Supabase:', e); }
+    console.log('Sin datos en ningún lado, iniciando en blanco');
   }
 
   state.currentDate = localDateStr();
