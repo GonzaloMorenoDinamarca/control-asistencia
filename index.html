@@ -1483,7 +1483,7 @@ function renderRegistroClase() {
   });
 
   // Ordenar por fecha descendente (más reciente primero)
-  allLogs.sort((a, b) => { if(b.destacado !== a.destacado) return b.destacado?1:-1; return b.date.localeCompare(a.date); });
+  allLogs.sort((a, b) => b.date.localeCompare(a.date));
 
   // Obtener valores únicos para filtros
   const niveles    = [...new Set(state.groups.map(g => g.nivel))].sort();
