@@ -1,38 +1,4 @@
-function exportGradesPDF() {
-  const modoTodos=document.getElementById('gradesGroupSelect')?.value==='__todos__';
-  const cursoFiltro=document.getElementById('gradesCursoFilter')?.value||'';
-  const grupoBase=getCurrentGroup()||state.groups.find(gr=>gr.nivel===state.currentNivel);
-  if(!grupoBase){showToast('Sin datos','error');return;}
-  const cal=getCalificaciones(grupoBase);const cols=cal.columns;
-  if(!cols.length){showToast('Sin evaluaciones registradas','error');return;}
-  const grupos=modoTodos?state.groups.filter(gr=>gr.nivel===state.currentNivel):[grupoBase];
-  let estudiantes=grupos.flatMap(gr=>{const calGr=getCalificaciones(gr);return gr.estudiantes.filter(e=>!cursoFiltro||e.c===cursoFiltro).map(e=>Object.assign({},e,{_cal:calGr,_grupo:gr.grupo||gr.asignatura}));});
-  estudiantes.sort((a,b)=>{const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});
-  if(!estudiantes.length){showToast('Sin estudiantes','error');return;}
-  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const fmtD=d=>{const[y,m,dd]=d.split('-');const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return dd+' '+meses[m-1]+' '+y;};
-  const today=fmtD(localDateStr());
-  const titulo=modoTodos?grupoBase.nivel+'\u00b0 Medio \u2014 Todos los grupos':grupoBase.asignatura+' \u2014 '+grupoBase.grupo;
-  const filtroLabel=cursoFiltro?'Curso: '+cursoFiltro:(modoTodos?grupoBase.nivel+'\u00b0 Medio completo':'Sin filtro adicional');
-  const gColor=v=>{if(v==null||v==='')return'#94a3b8';const n=parseFloat(v);if(n>=6)return'#16a34a';if(n>=5)return'#2563eb';if(n>=4)return'#d97706';return'#dc2626';};
-  let rows='';
-  estudiantes.forEach((st,i)=>{
-    const d=st._cal.data[st.id]||{};
-    const grades=cols.map(c=>d[c.id]!=null?d[c.id]:null);
-    const valid=grades.filter(v=>v!=null).map(Number);
-    const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):null;
-    rows+='<tr class="'+(i%2===0?'':'alt-row')+'">'
-      +'<td class="td-num">'+(i+1)+'</td>'
-      +'<td class="td-ap"><strong>'+esc(st.ap)+'</strong> <span class="dim">'+esc(st.am||'')+'</span></td>'
-      +'<td>'+esc(st.n)+'</td>'
-      +'<td class="td-c">'+esc(st.c)+'</td>'
-      +(modoTodos?'<td class="td-c">'+esc(st._grupo)+'</td>':'')
-      +grades.map(v=>'<td class="td-grade" style="color:'+gColor(v)+';font-weight:700">'+(v!=null?v:'\u2014')+'</td>').join('')
-      +'<td class="td-grade" style="color:'+gColor(avg)+';font-weight:800;font-size:10pt">'+(avg||'\u2014')+'</td>'
-      +'</tr>';
-  });
-  const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff}.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.header-title{font-size:13pt;font-weight:800;color:#1e40af}.header-sub{font-size:8pt;color:#64748b;margin-top:2px}.header-right{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.filter-bar{background:#f1f5f9;border-radius:4px;padding:4px 10px;font-size:7.5pt;color:#475569;margin-bottom:10px;display:flex;justify-content:space-between}.filter-bar strong{color:#1e40af}table{width:100%;border-collapse:collapse}thead th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:6px 7px;text-align:center}thead th.th-left{text-align:left}td{padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr.alt-row td{background:#f8fafc}.td-num{text-align:center;font-size:8pt;color:#94a3b8;width:24px}.td-ap{font-size:8.5pt;min-width:130px}.td-c{text-align:center;font-size:8pt;color:#7c3aed;font-weight:700;white-space:nowrap;width:50px}.td-grade{text-align:center;font-size:9pt;width:42px}.dim{font-weight:400;color:#94a3b8}.footer{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.print-btn{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.no-print{display:none}tr{page-break-inside:avoid}}';
-  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Notas</title><style>'+css+'</style></head><body>'
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Notas</title><style>'+css+'</style></head><body>'
     +'<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>'
     +'<div class="header"><div class="header-left"><div class="header-title">Libro de Notas \u2014 '+esc(titulo)+'</div><div class="header-sub">Liceo A-1 \u00b7 Arica \u00b7 Control de Asistencia y Notas</div></div>'
     +'<div class="header-right"><strong>'+today+'</strong><br>'+estudiantes.length+' estudiante'+(estudiantes.length!==1?'s':'')+' \u00b7 '+cols.length+' evaluaci\u00f3n'+(cols.length!==1?'es':'')+'</div></div>'
@@ -1496,45 +1462,6 @@ function renderStats() {
     </div>`;
   });
   html+='</div>';el.innerHTML=html;
-}
-function exportStatsPDF() {
-  const cg=getCurrentGroup();if(!cg){showToast('Selecciona un grupo','error');return;}
-  const dates=getAllDates(cg.id);if(!dates.length){showToast('Sin datos de asistencia','error');return;}
-  const stats=getStudentStats(cg);const hasCal=cg.calificaciones?.columns?.length>0;
-  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const fmtD=d=>{if(!d)return'';const[y,m,dd]=d.split('-');const ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return dd+' '+ms[m-1]+' '+y;};
-  const today=fmtD(localDateStr());
-  const pctC=p=>p>=85?'#16a34a':p>=75?'#2563eb':'#dc2626';
-  const gC=v=>{if(v==null)return'#94a3b8';const n=parseFloat(v);if(n>=6)return'#16a34a';if(n>=5)return'#2563eb';if(n>=4)return'#d97706';return'#dc2626';};
-  const sorted=stats.filter(s=>s.recorded>0).sort((a,b)=>a.pct-b.pct);
-  const tp=sorted.reduce((a,x)=>a+x.present,0),ta=sorted.reduce((a,x)=>a+x.absent,0),tl=sorted.reduce((a,x)=>a+x.late,0),tr2=sorted.reduce((a,x)=>a+x.recorded,0);
-  const avgPct=tr2>0?Math.round((tp/tr2)*100):0,bajo75=sorted.filter(s=>s.pct<75).length;
-  let rows='';
-  sorted.forEach((s,i)=>{rows+='<tr class="'+(s.pct<75?'lr':(i%2===0?'':'ar'))+'"><td class="n">'+(i+1)+'</td><td class="l"><b>'+esc(s.ap)+'</b> <span class="d">'+esc(s.am||'')+'</span></td><td>'+esc(s.n)+'</td><td class="c">'+esc(s.c)+'</td><td class="p" style="color:'+pctC(s.pct)+'">'+s.pct+'%</td><td class="n" style="color:#16a34a">'+s.present+'</td><td class="n" style="color:#dc2626">'+s.absent+'</td><td class="n" style="color:#d97706">'+s.late+'</td><td class="n" style="color:#64748b">'+s.recorded+'</td>'+(hasCal?'<td class="n" style="color:'+gC(s.notaPromedio)+';font-weight:700">'+(s.notaPromedio||'—')+'</td>':'')+'</tr>';});
-  const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b}.hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.ht{font-size:13pt;font-weight:800;color:#1e40af}.hs{font-size:8pt;color:#64748b;margin-top:2px}.hr{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.sm{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.sc{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center}.sv{font-size:14pt;font-weight:800;line-height:1}.sl{font-size:7.5pt;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse}th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;padding:6px 8px;text-align:center}th.l{text-align:left}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr.ar td{background:#f8fafc}tr.lr td{background:#fff5f5!important}.n{text-align:center;font-size:8.5pt}.l{font-size:8.5pt}.c{text-align:center;font-size:8pt;color:#7c3aed;font-weight:700}.p{text-align:center;font-size:9.5pt;font-weight:800;min-width:52px}.d{font-weight:400;color:#94a3b8}.ftr{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.pb{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.np{display:none}tr{page-break-inside:avoid}}';
-  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Estadísticas</title><style>'+css+'<\/style><\/head><body><button class="pb np" onclick="window.print()">Imprimir / Guardar PDF</button><div class="hdr"><div><div class="ht">Estadísticas de Asistencia — '+esc(cg.asignatura)+' '+esc(cg.grupo)+'</div><div class="hs">Liceo A-1 · Arica · '+dates.length+' clase'+(dates.length!==1?'s':'')+' ('+fmtD(dates[0])+' → '+fmtD(dates[dates.length-1])+')</div></div><div class="hr"><strong>'+today+'</strong><br>'+sorted.length+' estudiantes</div></div><div class="sm"><div class="sc"><div class="sv" style="color:#2563eb">'+avgPct+'%</div><div class="sl">Asistencia prom.</div></div><div class="sc"><div class="sv" style="color:#16a34a">'+tp+'</div><div class="sl">Presencias</div></div><div class="sc"><div class="sv" style="color:#dc2626">'+ta+'</div><div class="sl">Ausencias</div></div><div class="sc"><div class="sv" style="color:#dc2626">'+bajo75+'</div><div class="sl">Bajo 75%</div></div></div><table><thead><tr><th style="width:24px">#</th><th class="l">Apellidos</th><th class="l">Nombres</th><th style="width:52px">Curso</th><th style="width:60px">Asist.%</th><th style="width:42px">Pres.</th><th style="width:42px">Aus.</th><th style="width:42px">Atr.</th><th style="width:42px">Clases</th>'+(hasCal?'<th style="width:55px;background:#1d4ed8">Prom.Notas</th>':'')+' </tr></thead><tbody>'+rows+'</tbody></table><div class="ftr"><span>gonzaloamorenod.github.io</span><span>'+today+'</span></div><\/body><\/html>';
-  const w=window.open('','_blank','width=1100,height=750');
-  if(!w){showToast('Permite ventanas emergentes','error');return;}
-  w.document.write(html);w.document.close();showToast('PDF de estadísticas listo','success');
-}
-function exportAttendancePDF() {
-  const g=getCurrentGroup();if(!g||!g.estudiantes.length){showToast('Sin datos','error');return;}
-  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const fmtD=d=>{const[y,m,dd]=d.split('-');const dias=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];const dt=new Date(y,m-1,dd);return dias[dt.getDay()]+' '+dd+' de '+meses[m-1]+' de '+y;};
-  const today=fmtD(localDateStr());const dateLabel=fmtD(state.currentDate);
-  const sL={'present':'PRESENTE','absent':'AUSENTE','late':'ATRASO',null:'—'};
-  const sC={'present':'#16a34a','absent':'#dc2626','late':'#d97706',null:'#94a3b8'};
-  const sB={'present':'#f0fdf4','absent':'#fff5f5','late':'#fffbeb',null:'#f8fafc'};
-  const estudiantes=[...g.estudiantes].sort((a,b)=>{if(state.sortByCurso){const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;}const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});
-  let present=0,absent=0,late=0;
-  estudiantes.forEach(e=>{const s=getAtt(g.id,e.id,state.currentDate);if(s==='present')present++;else if(s==='absent')absent++;else if(s==='late')late++;});
-  let rows='';
-  estudiantes.forEach((e,i)=>{const s=getAtt(g.id,e.id,state.currentDate);rows+='<tr><td class="n">'+(i+1)+'</td><td class="l"><b>'+esc(e.ap)+'</b> <span class="d">'+esc(e.am||'')+'</span></td><td>'+esc(e.n)+'</td><td class="c">'+esc(e.c)+'</td><td style="text-align:center;color:'+sC[s]+';background:'+sB[s]+';font-weight:700;width:90px">'+sL[s]+'</td></tr>';});
-  const css='@page{size:A4 portrait;margin:14mm 16mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9.5pt;color:#1e293b}.hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.ht{font-size:13pt;font-weight:800;color:#1e40af}.hs{font-size:8.5pt;color:#64748b;margin-top:2px}.hr{text-align:right;font-size:8.5pt;color:#64748b;line-height:1.7}.sm{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.sc{border-radius:6px;padding:8px;text-align:center;border:1px solid #e2e8f0}.sv{font-size:16pt;font-weight:800;line-height:1}.sl{font-size:7.5pt;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse}th{background:#1e40af;color:#fff;font-size:8pt;font-weight:700;text-transform:uppercase;padding:7px 10px;text-align:left}th.c{text-align:center}td{padding:6px 10px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr:nth-child(even) td{background:#f8fafc}.n{text-align:center;font-size:8.5pt;color:#94a3b8;width:28px}.l{font-size:9pt;min-width:160px}.c{text-align:center;font-size:8.5pt;color:#7c3aed;font-weight:700;width:60px}.d{font-weight:400;color:#94a3b8}.ftr{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.pb{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.np{display:none}tr{page-break-inside:avoid}}';
-  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Asistencia</title><style>'+css+'<\/style><\/head><body><button class="pb np" onclick="window.print()">Imprimir / Guardar PDF</button><div class="hdr"><div><div class="ht">Lista de Asistencia — '+esc(g.asignatura)+'</div><div class="hs">'+esc(g.grupo)+' · Liceo A-1 · Arica</div></div><div class="hr"><strong>'+dateLabel+'</strong><br>'+g.estudiantes.length+' estudiantes</div></div><div class="sm"><div class="sc"><div class="sv" style="color:#2563eb">'+g.estudiantes.length+'</div><div class="sl">Total</div></div><div class="sc" style="background:#f0fdf4"><div class="sv" style="color:#16a34a">'+present+'</div><div class="sl">Presentes</div></div><div class="sc" style="background:#fff5f5"><div class="sv" style="color:#dc2626">'+absent+'</div><div class="sl">Ausentes</div></div><div class="sc" style="background:#fffbeb"><div class="sv" style="color:#d97706">'+late+'</div><div class="sl">Atrasos</div></div></div><table><thead><tr><th class="c" style="width:28px">#</th><th>Apellidos</th><th>Nombres</th><th class="c" style="width:60px">Curso</th><th class="c" style="width:90px">Asistencia</th></tr></thead><tbody>'+rows+'</tbody></table><div class="ftr"><span>gonzaloamorenod.github.io</span><span>'+today+'</span></div><\/body><\/html>';
-  const w=window.open('','_blank','width=850,height=950');
-  if(!w){showToast('Permite ventanas emergentes','error');return;}
-  w.document.write(html);w.document.close();showToast('PDF de asistencia listo','success');
 }
 function exportStatsPDF() {
   const cg=getCurrentGroup();if(!cg){showToast('Selecciona un grupo','error');return;}
