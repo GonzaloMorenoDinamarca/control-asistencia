@@ -274,6 +274,17 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
 .rc-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .rc-empty{text-align:center;padding:60px 20px;color:var(--text3);font-size:14px}
 .rc-count{font-size:12px;color:var(--text3);margin-left:auto}
+.rc-tarea{margin-top:5px;display:inline-flex;align-items:flex-start;gap:5px;background:rgba(251,191,36,.13);border:1px solid rgba(251,191,36,.35);border-radius:6px;padding:3px 8px;font-size:12px;color:#d97706;font-weight:600;line-height:1.5}
+.rc-tarea-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;opacity:.75;margin-right:2px}
+.rc-destacado-row{background:rgba(251,191,36,.06) !important}
+.rc-destacado-row:hover{background:rgba(251,191,36,.11) !important}
+.rc-star{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;opacity:.3;transition:opacity .15s,transform .15s;line-height:1}
+.rc-star.on{opacity:1;transform:scale(1.15)}
+.rc-star:hover{opacity:.8}
+.rc-edit-btn{background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;padding:3px 8px;color:var(--text2);transition:all .15s;white-space:nowrap}
+.rc-edit-btn:hover{background:var(--bg3);border-color:var(--border-l);color:var(--text)}
+.rc-actions{display:flex;flex-direction:column;gap:5px;align-items:flex-end;white-space:nowrap}
+.rc-badge-dest{display:inline-block;font-size:10px;font-weight:800;background:rgba(251,191,36,.2);color:#b45309;border-radius:4px;padding:1px 6px;letter-spacing:.04em;text-transform:uppercase;margin-left:4px}
 
 /* TOASTS */
 .toast{position:fixed;bottom:16px;right:16px;padding:10px 16px;border-radius:9px;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:13px;font-weight:600;box-shadow:var(--shadow);z-index:200;animation:toastIn .2s ease,toastOut .2s ease 2.8s;opacity:0}
@@ -481,6 +492,8 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
 </div>
 <div id="classLogModal" class="modal-overlay" style="display:none">
   <div class="modal modal-wide">
+    <input type="hidden" id="classLogGroupId">
+    <input type="hidden" id="classLogDate">
     <div class="notes-header">
       <h3>📋 Registro de la Clase</h3>
       <span id="classLogDateBadge" class="notes-date"></span>
@@ -493,6 +506,13 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
     </div>
     <div class="form-group"><label>Observaciones generales</label>
       <textarea id="classLogObs" rows="2" placeholder="Ej: Se realizó actividad práctica con microscopio..."></textarea>
+    </div>
+    <div class="form-group"><label>📌 Tarea / Pendiente para próxima clase</label>
+      <textarea id="classLogTarea" rows="2" placeholder="Ej: Revisar cuadernos de actividades, entregar guía N°3..."></textarea>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-top:4px">
+      <input type="checkbox" id="classLogDestacado" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+      <label for="classLogDestacado" style="cursor:pointer;font-weight:600">⭐ Destacar este registro (aparecerá resaltado en la lista)</label>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('classLogModal')">Cancelar</button>
@@ -1144,22 +1164,51 @@ function deleteCurrentNote() {
 // ═══════════════════════════════════════════════════════════
 function showClassLogModal() {
   const g=getCurrentGroup();if(!g){showToast('Selecciona un grupo primero','error');return;}
-  const log=g.classLogs?.[state.currentDate]||{};
-  document.getElementById('classLogDateBadge').textContent=formatDateES(state.currentDate);
+  _openClassLogModal(g.id, state.currentDate);
+}
+function editClassLog(groupId, date) {
+  _openClassLogModal(groupId, date);
+}
+function _openClassLogModal(groupId, date) {
+  const g=state.groups.find(x=>x.id===groupId);if(!g)return;
+  const log=g.classLogs?.[date]||{};
+  document.getElementById('classLogGroupId').value=groupId;
+  document.getElementById('classLogDate').value=date;
+  document.getElementById('classLogDateBadge').textContent=formatDateES(date);
   document.getElementById('classLogObjetivo').value=log.objetivo||'';
   document.getElementById('classLogTemas').value=log.temas||'';
   document.getElementById('classLogObs').value=log.obs||'';
+  document.getElementById('classLogTarea').value=log.tarea||'';
+  document.getElementById('classLogDestacado').checked=!!(log.destacado);
   document.getElementById('classLogModal').style.display='flex';
 }
 function saveClassLog() {
-  const g=getCurrentGroup();if(!g)return;
+  const groupId=document.getElementById('classLogGroupId').value;
+  const date=document.getElementById('classLogDate').value;
+  const g=groupId?state.groups.find(x=>x.id===groupId):getCurrentGroup();
+  if(!g)return;
   const objetivo=document.getElementById('classLogObjetivo').value.trim();
   const temas=document.getElementById('classLogTemas').value.trim();
   const obs=document.getElementById('classLogObs').value.trim();
+  const tarea=document.getElementById('classLogTarea').value.trim();
+  const destacado=document.getElementById('classLogDestacado').checked;
   if(!g.classLogs)g.classLogs={};
-  if(objetivo||temas||obs)g.classLogs[state.currentDate]={objetivo,temas,obs};
-  else delete g.classLogs[state.currentDate];
-  saveData();updateClassLogPreview();closeModal('classLogModal');showToast('Registro guardado','success');
+  if(objetivo||temas||obs||tarea||destacado){
+    g.classLogs[date]={objetivo,temas,obs,tarea,destacado};
+  } else {
+    delete g.classLogs[date];
+  }
+  saveData();
+  // Actualizar preview solo si es la fecha/grupo actual activo
+  if(g.id===(getCurrentGroup()?.id) && date===state.currentDate) updateClassLogPreview();
+  closeModal('classLogModal');
+  showToast('Registro guardado','success');
+  if(document.querySelector('#registroclaseView.active-view')||document.getElementById('registroclaseView')?.style.display!=='none') renderRegistroClase();
+}
+function toggleDestacado(groupId, date) {
+  const g=state.groups.find(x=>x.id===groupId);if(!g||!g.classLogs?.[date])return;
+  g.classLogs[date].destacado=!g.classLogs[date].destacado;
+  saveData();renderRegistroClase();
 }
 function updateClassLogPreview() {
   const g=getCurrentGroup();const preview=document.getElementById('classLogPreview');if(!preview)return;
@@ -1420,18 +1469,21 @@ function renderRegistroClase() {
       if (!log || (!log.objetivo && !log.temas && !log.obs)) return;
       allLogs.push({
         date,
+        groupId: g.id,
         nivel: g.nivel,
         asignatura: g.asignatura,
         grupo: g.grupo,
         objetivo: log.objetivo || '',
         temas: log.temas || '',
-        obs: log.obs || ''
+        obs: log.obs || '',
+        tarea: log.tarea || '',
+        destacado: !!(log.destacado)
       });
     });
   });
 
   // Ordenar por fecha descendente (más reciente primero)
-  allLogs.sort((a, b) => b.date.localeCompare(a.date));
+  allLogs.sort((a, b) => { if(b.destacado !== a.destacado) return b.destacado?1:-1; return b.date.localeCompare(a.date); });
 
   // Obtener valores únicos para filtros
   const niveles    = [...new Set(state.groups.map(g => g.nivel))].sort();
@@ -1486,6 +1538,7 @@ function renderRegistroClase() {
         <th>Electivo</th>
         <th style="width:100px">Grupo</th>
         <th>Registro de la Clase</th>
+        <th style="width:90px">Acciones</th>
       </tr></thead>
       <tbody>`;
 
@@ -1494,13 +1547,19 @@ function renderRegistroClase() {
     if (log.objetivo) partes.push(`<div class="rc-field"><span class="rc-field-label">Objetivo:</span>${escapeHtml(log.objetivo)}</div>`);
     if (log.temas)    partes.push(`<div class="rc-field"><span class="rc-field-label">Temas:</span>${escapeHtml(log.temas)}</div>`);
     if (log.obs)      partes.push(`<div class="rc-field"><span class="rc-field-label">Obs.:</span>${escapeHtml(log.obs)}</div>`);
-
-    html += `<tr>
-      <td class="rc-date">${formatDateES(log.date)}</td>
+    if (log.tarea)    partes.push(`<div class="rc-tarea"><span class="rc-tarea-label">📌 Pendiente:</span>${escapeHtml(log.tarea)}</div>`);
+    const rowClass = log.destacado ? ' class="rc-destacado-row"' : '';
+    const starClass = log.destacado ? 'on' : '';
+    html += `<tr${rowClass}>
+      <td class="rc-date">${formatDateES(log.date)}${log.destacado?'<br><span class="rc-badge-dest">⭐ destacado</span>':''}</td>
       <td class="rc-nivel">${log.nivel}° Medio</td>
       <td class="rc-asignatura">${escapeHtml(log.asignatura)}</td>
       <td class="rc-grupo">${escapeHtml(log.grupo)}</td>
       <td class="rc-log">${partes.join('')}</td>
+      <td class="rc-actions">
+        <button class="rc-star ${starClass}" onclick="toggleDestacado('${log.groupId}','${log.date}')" title="${log.destacado?'Quitar destaque':'Destacar registro'}">⭐</button>
+        <button class="rc-edit-btn" onclick="editClassLog('${log.groupId}','${log.date}')" title="Editar registro">✏️ Editar</button>
+      </td>
     </tr>`;
   });
 
