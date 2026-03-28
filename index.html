@@ -1,4 +1,53 @@
-<!DOCTYPE html>
+function exportGradesPDF() {
+  const modoTodos=document.getElementById('gradesGroupSelect')?.value==='__todos__';
+  const cursoFiltro=document.getElementById('gradesCursoFilter')?.value||'';
+  const grupoBase=getCurrentGroup()||state.groups.find(gr=>gr.nivel===state.currentNivel);
+  if(!grupoBase){showToast('Sin datos','error');return;}
+  const cal=getCalificaciones(grupoBase);const cols=cal.columns;
+  if(!cols.length){showToast('Sin evaluaciones registradas','error');return;}
+  const grupos=modoTodos?state.groups.filter(gr=>gr.nivel===state.currentNivel):[grupoBase];
+  let estudiantes=grupos.flatMap(gr=>{const calGr=getCalificaciones(gr);return gr.estudiantes.filter(e=>!cursoFiltro||e.c===cursoFiltro).map(e=>Object.assign({},e,{_cal:calGr,_grupo:gr.grupo||gr.asignatura}));});
+  estudiantes.sort((a,b)=>{const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});
+  if(!estudiantes.length){showToast('Sin estudiantes','error');return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD=d=>{const[y,m,dd]=d.split('-');const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return dd+' '+meses[m-1]+' '+y;};
+  const today=fmtD(localDateStr());
+  const titulo=modoTodos?grupoBase.nivel+'\u00b0 Medio \u2014 Todos los grupos':grupoBase.asignatura+' \u2014 '+grupoBase.grupo;
+  const filtroLabel=cursoFiltro?'Curso: '+cursoFiltro:(modoTodos?grupoBase.nivel+'\u00b0 Medio completo':'Sin filtro adicional');
+  const gColor=v=>{if(v==null||v==='')return'#94a3b8';const n=parseFloat(v);if(n>=6)return'#16a34a';if(n>=5)return'#2563eb';if(n>=4)return'#d97706';return'#dc2626';};
+  let rows='';
+  estudiantes.forEach((st,i)=>{
+    const d=st._cal.data[st.id]||{};
+    const grades=cols.map(c=>d[c.id]!=null?d[c.id]:null);
+    const valid=grades.filter(v=>v!=null).map(Number);
+    const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):null;
+    rows+='<tr class="'+(i%2===0?'':'alt-row')+'">'
+      +'<td class="td-num">'+(i+1)+'</td>'
+      +'<td class="td-ap"><strong>'+esc(st.ap)+'</strong> <span class="dim">'+esc(st.am||'')+'</span></td>'
+      +'<td>'+esc(st.n)+'</td>'
+      +'<td class="td-c">'+esc(st.c)+'</td>'
+      +(modoTodos?'<td class="td-c">'+esc(st._grupo)+'</td>':'')
+      +grades.map(v=>'<td class="td-grade" style="color:'+gColor(v)+';font-weight:700">'+(v!=null?v:'\u2014')+'</td>').join('')
+      +'<td class="td-grade" style="color:'+gColor(avg)+';font-weight:800;font-size:10pt">'+(avg||'\u2014')+'</td>'
+      +'</tr>';
+  });
+  const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff}.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.header-title{font-size:13pt;font-weight:800;color:#1e40af}.header-sub{font-size:8pt;color:#64748b;margin-top:2px}.header-right{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.filter-bar{background:#f1f5f9;border-radius:4px;padding:4px 10px;font-size:7.5pt;color:#475569;margin-bottom:10px;display:flex;justify-content:space-between}.filter-bar strong{color:#1e40af}table{width:100%;border-collapse:collapse}thead th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:6px 7px;text-align:center}thead th.th-left{text-align:left}td{padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr.alt-row td{background:#f8fafc}.td-num{text-align:center;font-size:8pt;color:#94a3b8;width:24px}.td-ap{font-size:8.5pt;min-width:130px}.td-c{text-align:center;font-size:8pt;color:#7c3aed;font-weight:700;white-space:nowrap;width:50px}.td-grade{text-align:center;font-size:9pt;width:42px}.dim{font-weight:400;color:#94a3b8}.footer{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.print-btn{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.no-print{display:none}tr{page-break-inside:avoid}}';
+  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Notas</title><style>'+css+'</style></head><body>'
+    +'<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>'
+    +'<div class="header"><div class="header-left"><div class="header-title">Libro de Notas \u2014 '+esc(titulo)+'</div><div class="header-sub">Liceo A-1 \u00b7 Arica \u00b7 Control de Asistencia y Notas</div></div>'
+    +'<div class="header-right"><strong>'+today+'</strong><br>'+estudiantes.length+' estudiante'+(estudiantes.length!==1?'s':'')+' \u00b7 '+cols.length+' evaluaci\u00f3n'+(cols.length!==1?'es':'')+'</div></div>'
+    +'<div class="filter-bar"><span>Filtro: <strong>'+esc(filtroLabel)+'</strong></span><span>gonzaloamorenod@gmail.com</span></div>'
+    +'<table><thead><tr><th style="width:24px">#</th><th class="th-left" style="min-width:130px">Apellidos</th><th class="th-left">Nombres</th><th style="width:50px">Curso</th>'
+    +(modoTodos?'<th style="width:80px">Grupo</th>':'')
+    +cols.map(c=>'<th style="width:42px">'+esc(c.name)+(c.date?'<br><span style="font-weight:400;font-size:6.5pt;opacity:.8">'+fmtD(c.date)+'</span>':'')+'</th>').join('')
+    +'<th style="width:50px;background:#1d4ed8">Prom.</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<div class="footer"><span>Control de Asistencia y Notas \u00b7 gonzaloamorenod.github.io</span><span>Generado: '+today+'</span></div>'
+    +'</body></html>';
+  const w=window.open('','_blank','width=1100,height=750');
+  if(!w){showToast('Permite ventanas emergentes para exportar','error');return;}
+  w.document.write(html);w.document.close();
+  showToast('PDF de notas listo','success');
+}<!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
 <meta charset="UTF-8">
@@ -389,7 +438,7 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
           <button class="btn btn-primary btn-sm" id="importPdfBtn">📄 Importar PDF</button>
           <button class="btn btn-sm" id="addStudentBtn">➕ Estudiante</button>
           <button class="btn btn-sm" id="sortCursoBtn" title="Ordenar por curso y apellido">⇅ Curso</button>
-          <button class="btn btn-sm" id="allPresentBtn">✓ Todos P</button>
+          <button class="btn btn-sm" id="attPdfBtn" title="Exportar lista de asistencia a PDF">↓ PDF</button>
           <button class="btn btn-sm" id="csvExportBtn">↓ CSV</button>
           <button class="btn btn-sm" id="csvImportBtn">↑ CSV</button>
           <button class="btn btn-danger btn-sm" id="deleteGroupBtn">🗑 Eliminar</button>
@@ -426,8 +475,8 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
           <select id="gradesGroupSelect" class="select-input" style="max-width:220px"></select>
           <select id="gradesCursoFilter" class="select-input" style="max-width:160px" onchange="renderCalificaciones()"></select>
           <button class="btn btn-primary btn-sm" onclick="showAddGradeColModal()">➕ Agregar Evaluación</button>
-          <button class="btn btn-sm" id="gradesExportBtn">↓ CSV Grupo</button>
-          <button class="btn btn-sm" id="gradesExportCursoBtn">↓ CSV Filtrado</button>
+          <button class="btn btn-sm" id="gradesExportCursoBtn">↓ CSV</button>
+          <button class="btn btn-sm" id="gradesPdfBtn" title="Exportar notas a PDF">↓ PDF Notas</button>
           <button class="btn btn-sm" id="gradesImportBtn">↑ CSV Notas</button>
         </div>
         <div id="gradesTableWrapper" class="grades-table-wrapper">
@@ -508,15 +557,32 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
       <textarea id="classLogObs" rows="2" placeholder="Ej: Se realizó actividad práctica con microscopio..."></textarea>
     </div>
     <div class="form-group"><label>📌 Tarea / Pendiente para próxima clase</label>
-      <textarea id="classLogTarea" rows="2" placeholder="Ej: Revisar cuadernos de actividades, entregar guía N°3..."></textarea>
+      <textarea id="classLogTarea" rows="2" placeholder="Ej: Revisar cuadernos, entregar guía N°3..."></textarea>
     </div>
     <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-top:4px">
       <input type="checkbox" id="classLogDestacado" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-      <label for="classLogDestacado" style="cursor:pointer;font-weight:600">⭐ Destacar este registro (aparecerá resaltado en la lista)</label>
+      <label for="classLogDestacado" style="cursor:pointer;font-weight:600">⭐ Destacar este registro</label>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('classLogModal')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveClassLog()">Guardar</button>
+    </div>
+  </div>
+</div>
+<div id="exportModal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <h3>📥 Exportar Asistencia</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.5">¿Qué asistencia deseas exportar?</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:4px">
+      <button class="btn btn-primary" style="justify-content:center;padding:12px" onclick="doExportAsistencia('current')">
+        📅 Solo la fecha actual<br><span style="font-size:11px;font-weight:400;opacity:.85" id="exportCurrentDateLabel"></span>
+      </button>
+      <button class="btn" style="justify-content:center;padding:12px" onclick="doExportAsistencia('all')">
+        📋 Toda la asistencia registrada
+      </button>
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn" onclick="closeModal('exportModal')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -792,7 +858,7 @@ function loadLocalStorage() {
 // Guardar en localStorage DE INMEDIATO + Supabase en background
 function saveData() {
   // 1) localStorage — instantáneo, nunca falla
-  try { const now=new Date().toISOString(); localStorage.setItem('asistenciaState', JSON.stringify(state)); localStorage.setItem('asistenciaStateUpdatedAt', now); } catch(e) {}
+  try{const _t=new Date().toISOString();localStorage.setItem('asistenciaState',JSON.stringify(state));localStorage.setItem('asistenciaStateUpdatedAt',_t);}catch(e){}
   showSaveIndicator();
 
   // 2) Supabase — con debounce de 800ms para no saturar
@@ -815,7 +881,7 @@ function saveData() {
 // Guardar en Supabase AHORA (sin debounce) para operaciones críticas
 async function saveDataNow() {
   // 1) localStorage primero
-  try { const now=new Date().toISOString(); localStorage.setItem('asistenciaState', JSON.stringify(state)); localStorage.setItem('asistenciaStateUpdatedAt', now); } catch(e) {}
+  try{const _t=new Date().toISOString();localStorage.setItem('asistenciaState',JSON.stringify(state));localStorage.setItem('asistenciaStateUpdatedAt',_t);}catch(e){}
   showSaveIndicator();
 
   // 2) Supabase inmediato
@@ -843,50 +909,20 @@ async function startCloudMode(user) {
   const badge = document.getElementById('userBadge');
   if (badge) { badge.classList.remove('local'); document.getElementById('userEmailText').textContent = user.email; }
 
-  // ESTRATEGIA CORRECTA:
-  // Siempre consultar Supabase al iniciar sesion (fuente de verdad compartida).
-  // Comparar timestamps con localStorage y usar el mas reciente.
-  // Solo usar localStorage como fallback si Supabase falla o esta offline.
-
-  let cloudState = null;
-  let cloudUpdatedAt = null;
-
+  // Siempre consultar Supabase al iniciar sesión — fuente de verdad compartida.
+  let cloudState=null,cloudUpdatedAt=null;
   try {
-    const { data, error } = await sbClient.from('app_data')
-      .select('state, updated_at').eq('id', user.id).single();
-    if (!error && data && validateState(data.state)) {
-      cloudState = data.state;
-      cloudUpdatedAt = data.updated_at ? new Date(data.updated_at) : null;
-      console.log('Datos desde Supabase:', cloudState.groups.length, 'grupos');
-    }
-  } catch(e) { console.warn('Error consultando Supabase (se usara localStorage):', e); }
-
-  const hayLocal = loadLocalStorage();
-  let localUpdatedAt = null;
-  try {
-    const meta = localStorage.getItem('asistenciaStateUpdatedAt');
-    if (meta) localUpdatedAt = new Date(meta);
-  } catch(e) {}
-
-  if (cloudState) {
-    const cloudNewer = !localUpdatedAt || !cloudUpdatedAt || cloudUpdatedAt >= localUpdatedAt;
-    if (cloudNewer) {
-      console.log('Usando datos de Supabase (mas recientes)');
-      state = cloudState;
-      try {
-        localStorage.setItem('asistenciaState', JSON.stringify(state));
-        localStorage.setItem('asistenciaStateUpdatedAt', (cloudUpdatedAt || new Date()).toISOString());
-      } catch(e) {}
-    } else {
-      console.log('Usando datos de localStorage (mas recientes), sincronizando a Supabase...');
-      await saveDataNow();
-    }
-  } else if (hayLocal && state.groups.length > 0) {
-    console.log('Sin datos en Supabase, subiendo localStorage...');
-    await saveDataNow();
-  } else {
-    console.log('Sin datos en ningún lado, iniciando en blanco');
-  }
+    const{data,error}=await sbClient.from('app_data').select('state,updated_at').eq('id',user.id).single();
+    if(!error&&data&&validateState(data.state)){cloudState=data.state;cloudUpdatedAt=data.updated_at?new Date(data.updated_at):null;}
+  } catch(e){console.warn('Error consultando Supabase:',e);}
+  const hayLocal=loadLocalStorage();
+  let localUpdatedAt=null;
+  try{const m=localStorage.getItem('asistenciaStateUpdatedAt');if(m)localUpdatedAt=new Date(m);}catch(e){}
+  if(cloudState){
+    const cloudNewer=!localUpdatedAt||!cloudUpdatedAt||cloudUpdatedAt>=localUpdatedAt;
+    if(cloudNewer){state=cloudState;try{localStorage.setItem('asistenciaState',JSON.stringify(state));localStorage.setItem('asistenciaStateUpdatedAt',(cloudUpdatedAt||new Date()).toISOString());}catch(e){}}
+    else{await saveDataNow();}
+  }else if(hayLocal&&state.groups.length>0){await saveDataNow();}
 
   state.currentDate = localDateStr();
   initAppUI();
@@ -1057,13 +1093,36 @@ function renderCalificaciones() {
   html += '</tbody></table>';
   wrapper.innerHTML = html;
 }
-function exportGradesCSV() {
-  const g = getCurrentGroup(); if (!g||!g.estudiantes.length){showToast('Sin datos','error');return;}
-  const cal=getCalificaciones(g); const cols=cal.columns;
-  let csv='#;Apellidos;Nombres;Curso;'+cols.map(c=>`"${c.name}"`).join(';')+';Promedio\n';
-  g.estudiantes.forEach((st,i)=>{const d=cal.data[st.id]||{};const grades=cols.map(c=>d[c.id]!=null?d[c.id]:'');const valid=grades.filter(v=>v!=='').map(Number);const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):'';csv+=`${i+1};"${st.ap} ${st.am||''}";"${st.n}";"${st.c}";${grades.map(v=>v===''?'':v).join(';')};${avg}\n`;});
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`notas_${g.asignatura}_${g.grupo}.csv`;a.click();
-  showToast('CSV exportado','success');
+function exportGradesPDF() {
+  const modoTodos=document.getElementById('gradesGroupSelect')?.value==='__todos__';
+  const cursoFiltro=document.getElementById('gradesCursoFilter')?.value||'';
+  const grupoBase=getCurrentGroup()||state.groups.find(gr=>gr.nivel===state.currentNivel);
+  if(!grupoBase){showToast('Sin datos','error');return;}
+  const cal=getCalificaciones(grupoBase);const cols=cal.columns;
+  if(!cols.length){showToast('Sin evaluaciones registradas','error');return;}
+  const grupos=modoTodos?state.groups.filter(gr=>gr.nivel===state.currentNivel):[grupoBase];
+  let estudiantes=grupos.flatMap(gr=>{const calGr=getCalificaciones(gr);return gr.estudiantes.filter(e=>!cursoFiltro||e.c===cursoFiltro).map(e=>Object.assign({},e,{_cal:calGr,_grupo:gr.grupo||gr.asignatura}));});
+  estudiantes.sort((a,b)=>{const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});
+  if(!estudiantes.length){showToast('Sin estudiantes','error');return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD=d=>{if(!d)return'';const[y,m,dd]=d.split('-');const ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return dd+' '+ms[m-1]+' '+y;};
+  const today=fmtD(localDateStr());
+  const titulo=modoTodos?grupoBase.nivel+'° Medio — Todos los grupos':grupoBase.asignatura+' — '+grupoBase.grupo;
+  const filtroLabel=cursoFiltro?'Curso: '+cursoFiltro:(modoTodos?grupoBase.nivel+'° Medio completo':'Sin filtro');
+  const gColor=v=>{if(v==null||v==='')return'#94a3b8';const n=parseFloat(v);if(n>=6)return'#16a34a';if(n>=5)return'#2563eb';if(n>=4)return'#d97706';return'#dc2626';};
+  let rows='';
+  estudiantes.forEach((st,i)=>{
+    const d=st._cal.data[st.id]||{};
+    const grades=cols.map(c=>d[c.id]!=null?d[c.id]:null);
+    const valid=grades.filter(v=>v!=null).map(Number);
+    const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):null;
+    rows+='<tr class="'+(i%2===0?'':'alt')+'"><td class="n">'+(i+1)+'</td><td class="l"><b>'+esc(st.ap)+'</b> <span class="d">'+esc(st.am||'')+'</span></td><td>'+esc(st.n)+'</td><td class="c">'+esc(st.c)+'</td>'+(modoTodos?'<td class="c">'+esc(st._grupo)+'</td>':'')+grades.map(v=>'<td class="g" style="color:'+gColor(v)+'">'+( v!=null?v:'—')+'</td>').join('')+'<td class="g" style="color:'+gColor(avg)+';font-weight:800">'+(avg||'—')+'</td></tr>';
+  });
+  const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b}.hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.ht{font-size:13pt;font-weight:800;color:#1e40af}.hs{font-size:8pt;color:#64748b;margin-top:2px}.hr{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.fb{background:#f1f5f9;border-radius:4px;padding:4px 10px;font-size:7.5pt;color:#475569;margin-bottom:10px;display:flex;justify-content:space-between}.fb strong{color:#1e40af}table{width:100%;border-collapse:collapse}th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;padding:6px 7px;text-align:center}th.l{text-align:left}td{padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr.alt td{background:#f8fafc}.n{text-align:center;font-size:8pt;color:#94a3b8;width:24px}.l{font-size:8.5pt;min-width:130px}.c{text-align:center;font-size:8pt;color:#7c3aed;font-weight:700;width:50px}.g{text-align:center;font-size:9pt;width:42px;font-weight:700}.d{font-weight:400;color:#94a3b8}.ftr{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.pb{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.np{display:none}tr{page-break-inside:avoid}}';
+  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Notas</title><style>'+css+'</style></head><body><button class="pb np" onclick="window.print()">Imprimir / Guardar PDF</button><div class="hdr"><div><div class="ht">Libro de Notas — '+esc(titulo)+'</div><div class="hs">Liceo A-1 · Arica · Control de Asistencia y Notas</div></div><div class="hr"><strong>'+today+'</strong><br>'+estudiantes.length+' estudiantes · '+cols.length+' eval.</div></div><div class="fb"><span>Filtro: <strong>'+esc(filtroLabel)+'</strong></span><span>gonzaloamorenod@gmail.com</span></div><table><thead><tr><th style="width:24px">#</th><th class="l" style="min-width:130px">Apellidos</th><th class="l" style="min-width:110px">Nombres</th><th style="width:50px">Curso</th>'+(modoTodos?'<th style="width:80px">Grupo</th>':'')+cols.map(c=>'<th style="width:42px">'+esc(c.name)+(c.date?'<br><small>'+fmtD(c.date)+'</small>':'')+'</th>').join('')+'<th style="width:50px;background:#1d4ed8">Prom.</th></tr></thead><tbody>'+rows+'</tbody></table><div class="ftr"><span>gonzaloamorenod.github.io</span><span>'+today+'</span></div></body></html>';
+  const w=window.open('','_blank','width=1100,height=750');
+  if(!w){showToast('Permite ventanas emergentes','error');return;}
+  w.document.write(html);w.document.close();showToast('PDF de notas listo','success');
 }
 function exportGradesCSVFiltrado() {
   const modoTodos=document.getElementById('gradesGroupSelect')?.value==='__todos__';
@@ -1164,12 +1223,10 @@ function deleteCurrentNote() {
 // ═══════════════════════════════════════════════════════════
 function showClassLogModal() {
   const g=getCurrentGroup();if(!g){showToast('Selecciona un grupo primero','error');return;}
-  _openClassLogModal(g.id, state.currentDate);
+  _openClassLogModal(g.id,state.currentDate);
 }
-function editClassLog(groupId, date) {
-  _openClassLogModal(groupId, date);
-}
-function _openClassLogModal(groupId, date) {
+function editClassLog(groupId,date){_openClassLogModal(groupId,date);}
+function _openClassLogModal(groupId,date) {
   const g=state.groups.find(x=>x.id===groupId);if(!g)return;
   const log=g.classLogs?.[date]||{};
   document.getElementById('classLogGroupId').value=groupId;
@@ -1185,27 +1242,21 @@ function _openClassLogModal(groupId, date) {
 function saveClassLog() {
   const groupId=document.getElementById('classLogGroupId').value;
   const date=document.getElementById('classLogDate').value;
-  const g=groupId?state.groups.find(x=>x.id===groupId):getCurrentGroup();
-  if(!g)return;
+  const g=groupId?state.groups.find(x=>x.id===groupId):getCurrentGroup();if(!g)return;
   const objetivo=document.getElementById('classLogObjetivo').value.trim();
   const temas=document.getElementById('classLogTemas').value.trim();
   const obs=document.getElementById('classLogObs').value.trim();
   const tarea=document.getElementById('classLogTarea').value.trim();
   const destacado=document.getElementById('classLogDestacado').checked;
   if(!g.classLogs)g.classLogs={};
-  if(objetivo||temas||obs||tarea||destacado){
-    g.classLogs[date]={objetivo,temas,obs,tarea,destacado};
-  } else {
-    delete g.classLogs[date];
-  }
+  if(objetivo||temas||obs||tarea||destacado){g.classLogs[date]={objetivo,temas,obs,tarea,destacado};}
+  else{delete g.classLogs[date];}
   saveData();
-  // Actualizar preview solo si es la fecha/grupo actual activo
-  if(g.id===(getCurrentGroup()?.id) && date===state.currentDate) updateClassLogPreview();
-  closeModal('classLogModal');
-  showToast('Registro guardado','success');
-  if(document.querySelector('#registroclaseView.active-view')||document.getElementById('registroclaseView')?.style.display!=='none') renderRegistroClase();
+  if(g.id===(getCurrentGroup()?.id)&&date===state.currentDate)updateClassLogPreview();
+  closeModal('classLogModal');showToast('Registro guardado','success');
+  if(document.getElementById('registroclaseView')?.classList.contains('active'))renderRegistroClase();
 }
-function toggleDestacado(groupId, date) {
+function toggleDestacado(groupId,date) {
   const g=state.groups.find(x=>x.id===groupId);if(!g||!g.classLogs?.[date])return;
   g.classLogs[date].destacado=!g.classLogs[date].destacado;
   saveData();renderRegistroClase();
@@ -1220,15 +1271,36 @@ function updateClassLogPreview() {
 // ═══════════════════════════════════════════════════════════
 //  CSV ASISTENCIA
 // ═══════════════════════════════════════════════════════════
-function exportToCSV() {
+function showExportModal() {
   const g=getCurrentGroup();if(!g||!g.estudiantes.length){showToast('Sin datos','error');return;}
-  const dates=[...new Set(Object.keys(g.asistencia||{}))].sort();
-  let csv='#;Apellido Paterno;Apellido Materno;Nombre;Curso;'+dates.join(';')+'\n';
-  g.estudiantes.forEach((e,i)=>{const row=[i+1,e.ap,e.am,e.n,e.c,...dates.map(d=>getAtt(g.id,e.id,d)||'')];csv+=row.join(';')+'\n';});
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`asistencia_${g.asignatura}_${g.grupo}.csv`;a.click();
-  showToast('CSV exportado','success');
+  const lbl=document.getElementById('exportCurrentDateLabel');
+  if(lbl){const[y,m,d]=state.currentDate.split('-');lbl.textContent=d+'/'+m+'/'+y;}
+  document.getElementById('exportModal').style.display='flex';
 }
-async function handleCSVImport(event) {
+function doExportAsistencia(mode) {
+  closeModal('exportModal');
+  const g=getCurrentGroup();if(!g||!g.estudiantes.length)return;
+  const allDates=[...new Set(Object.keys(g.asistencia||{}))].sort();
+  const dates=mode==='current'?[state.currentDate]:allDates;
+  if(!dates.length){showToast('Sin fechas registradas','error');return;}
+  const fmtDate=d=>{const[y,m,dd]=d.split('-');return dd+'/'+m+'/'+y;};
+  const sLabel={'present':'PRESENTE','absent':'AUSENTE','late':'ATRASO','':'' };
+  const estudiantes=[...g.estudiantes].sort((a,b)=>{
+    if(state.sortByCurso){const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;}
+    const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');
+  });
+  let html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt}th{background:#1e40af;color:#fff;font-weight:bold;padding:6px 12px;border:1px solid #1d4ed8;text-align:center;white-space:nowrap}td{padding:5px 12px;border:1px solid #d1d5db;white-space:nowrap;vertical-align:middle}.num{text-align:center}.presente{background:#bbf7d0;color:#14532d;font-weight:bold;text-align:center}.ausente{background:#fecaca;color:#7f1d1d;font-weight:bold;text-align:center}.atraso{background:#fef08a;color:#713f12;font-weight:bold;text-align:center}.vacio{text-align:center;color:#9ca3af}</style></head><body><table><thead><tr><th>#</th><th>Apellido Paterno</th><th>Apellido Materno</th><th>Nombre</th><th>Curso</th>'+dates.map(d=>'<th>'+fmtDate(d)+'</th>').join('')+'</tr></thead><tbody>';
+  estudiantes.forEach((e,i)=>{
+    html+='<tr><td class="num">'+(i+1)+'</td><td>'+escapeHtml(e.ap)+'</td><td>'+escapeHtml(e.am||'')+'</td><td>'+escapeHtml(e.n)+'</td><td class="num">'+escapeHtml(e.c)+'</td>';
+    dates.forEach(d=>{const s=getAtt(g.id,e.id,d)||'';const cls=s==='present'?'presente':s==='absent'?'ausente':s==='late'?'atraso':'vacio';html+='<td class="'+cls+'">'+(sLabel[s]||'—')+'</td>';});
+    html+='</tr>';
+  });
+  html+='</tbody></table></body></html>';
+  const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='asistencia_'+g.asignatura+'_'+g.grupo+'_'+(mode==='current'?state.currentDate:'completo')+'.xls';
+  a.click();showToast('Archivo exportado','success');
+}async function handleCSVImport(event) {
   const file=event.target.files[0];if(!file)return;
   try {
     const text=await file.text();const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);if(lines.length<2){showToast('CSV vacío','error');return;}
@@ -1397,7 +1469,7 @@ function renderStats() {
   if(!cg){el.innerHTML='<div class="empty-state"><h3>Selecciona un grupo</h3></div>';return;}
   const dates=getAllDates(cg.id);if(!dates.length){el.innerHTML='<div class="empty-state"><h3>Sin datos de asistencia aún</h3></div>';return;}
   const stats=getStudentStats(cg);const hasCal=cg.calificaciones?.columns?.length>0;
-  let html=`<h3 style="margin-bottom:12px;font-size:15px">📊 Estadísticas — ${escapeHtml(cg.asignatura)} ${escapeHtml(cg.grupo)}</h3>
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><h3 style="font-size:15px">📊 Estadísticas — ${escapeHtml(cg.asignatura)} ${escapeHtml(cg.grupo)}</h3><button class="btn btn-sm" onclick="exportStatsPDF()" style="flex-shrink:0">↓ PDF</button></div>
   <div class="table-container" style="margin-bottom:20px"><table><thead><tr>
     <th style="width:28px">#</th><th>Apellidos</th><th>Nombres</th><th>Curso</th>
     <th>Asistencia %</th><th>Presentes</th><th>Ausentes</th><th>Atrasos</th><th>Clases</th>
@@ -1424,6 +1496,140 @@ function renderStats() {
     </div>`;
   });
   html+='</div>';el.innerHTML=html;
+}
+function exportStatsPDF() {
+  const cg=getCurrentGroup();if(!cg){showToast('Selecciona un grupo','error');return;}
+  const dates=getAllDates(cg.id);if(!dates.length){showToast('Sin datos de asistencia','error');return;}
+  const stats=getStudentStats(cg);const hasCal=cg.calificaciones?.columns?.length>0;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD=d=>{if(!d)return'';const[y,m,dd]=d.split('-');const ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return dd+' '+ms[m-1]+' '+y;};
+  const today=fmtD(localDateStr());
+  const pctC=p=>p>=85?'#16a34a':p>=75?'#2563eb':'#dc2626';
+  const gC=v=>{if(v==null)return'#94a3b8';const n=parseFloat(v);if(n>=6)return'#16a34a';if(n>=5)return'#2563eb';if(n>=4)return'#d97706';return'#dc2626';};
+  const sorted=stats.filter(s=>s.recorded>0).sort((a,b)=>a.pct-b.pct);
+  const tp=sorted.reduce((a,x)=>a+x.present,0),ta=sorted.reduce((a,x)=>a+x.absent,0),tl=sorted.reduce((a,x)=>a+x.late,0),tr2=sorted.reduce((a,x)=>a+x.recorded,0);
+  const avgPct=tr2>0?Math.round((tp/tr2)*100):0,bajo75=sorted.filter(s=>s.pct<75).length;
+  let rows='';
+  sorted.forEach((s,i)=>{rows+='<tr class="'+(s.pct<75?'lr':(i%2===0?'':'ar'))+'"><td class="n">'+(i+1)+'</td><td class="l"><b>'+esc(s.ap)+'</b> <span class="d">'+esc(s.am||'')+'</span></td><td>'+esc(s.n)+'</td><td class="c">'+esc(s.c)+'</td><td class="p" style="color:'+pctC(s.pct)+'">'+s.pct+'%</td><td class="n" style="color:#16a34a">'+s.present+'</td><td class="n" style="color:#dc2626">'+s.absent+'</td><td class="n" style="color:#d97706">'+s.late+'</td><td class="n" style="color:#64748b">'+s.recorded+'</td>'+(hasCal?'<td class="n" style="color:'+gC(s.notaPromedio)+';font-weight:700">'+(s.notaPromedio||'—')+'</td>':'')+'</tr>';});
+  const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b}.hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.ht{font-size:13pt;font-weight:800;color:#1e40af}.hs{font-size:8pt;color:#64748b;margin-top:2px}.hr{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.sm{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.sc{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center}.sv{font-size:14pt;font-weight:800;line-height:1}.sl{font-size:7.5pt;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse}th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;padding:6px 8px;text-align:center}th.l{text-align:left}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr.ar td{background:#f8fafc}tr.lr td{background:#fff5f5!important}.n{text-align:center;font-size:8.5pt}.l{font-size:8.5pt}.c{text-align:center;font-size:8pt;color:#7c3aed;font-weight:700}.p{text-align:center;font-size:9.5pt;font-weight:800;min-width:52px}.d{font-weight:400;color:#94a3b8}.ftr{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.pb{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.np{display:none}tr{page-break-inside:avoid}}';
+  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Estadísticas</title><style>'+css+'</style></head><body><button class="pb np" onclick="window.print()">Imprimir / Guardar PDF</button><div class="hdr"><div><div class="ht">Estadísticas de Asistencia — '+esc(cg.asignatura)+' '+esc(cg.grupo)+'</div><div class="hs">Liceo A-1 · Arica · '+dates.length+' clase'+(dates.length!==1?'s':'')+' ('+fmtD(dates[0])+' → '+fmtD(dates[dates.length-1])+')</div></div><div class="hr"><strong>'+today+'</strong><br>'+sorted.length+' estudiantes</div></div><div class="sm"><div class="sc"><div class="sv" style="color:#2563eb">'+avgPct+'%</div><div class="sl">Asistencia prom.</div></div><div class="sc"><div class="sv" style="color:#16a34a">'+tp+'</div><div class="sl">Presencias</div></div><div class="sc"><div class="sv" style="color:#dc2626">'+ta+'</div><div class="sl">Ausencias</div></div><div class="sc"><div class="sv" style="color:#dc2626">'+bajo75+'</div><div class="sl">Bajo 75%</div></div></div><table><thead><tr><th style="width:24px">#</th><th class="l">Apellidos</th><th class="l">Nombres</th><th style="width:52px">Curso</th><th style="width:60px">Asist.%</th><th style="width:42px">Pres.</th><th style="width:42px">Aus.</th><th style="width:42px">Atr.</th><th style="width:42px">Clases</th>'+(hasCal?'<th style="width:55px;background:#1d4ed8">Prom.Notas</th>':'')+' </tr></thead><tbody>'+rows+'</tbody></table><div class="ftr"><span>gonzaloamorenod.github.io</span><span>'+today+'</span></div></body></html>';
+  const w=window.open('','_blank','width=1100,height=750');
+  if(!w){showToast('Permite ventanas emergentes','error');return;}
+  w.document.write(html);w.document.close();showToast('PDF de estadísticas listo','success');
+}
+function exportAttendancePDF() {
+  const g=getCurrentGroup();if(!g||!g.estudiantes.length){showToast('Sin datos','error');return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD=d=>{const[y,m,dd]=d.split('-');const dias=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];const dt=new Date(y,m-1,dd);return dias[dt.getDay()]+' '+dd+' de '+meses[m-1]+' de '+y;};
+  const today=fmtD(localDateStr());const dateLabel=fmtD(state.currentDate);
+  const sL={'present':'PRESENTE','absent':'AUSENTE','late':'ATRASO',null:'—'};
+  const sC={'present':'#16a34a','absent':'#dc2626','late':'#d97706',null:'#94a3b8'};
+  const sB={'present':'#f0fdf4','absent':'#fff5f5','late':'#fffbeb',null:'#f8fafc'};
+  const estudiantes=[...g.estudiantes].sort((a,b)=>{if(state.sortByCurso){const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;}const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});
+  let present=0,absent=0,late=0;
+  estudiantes.forEach(e=>{const s=getAtt(g.id,e.id,state.currentDate);if(s==='present')present++;else if(s==='absent')absent++;else if(s==='late')late++;});
+  let rows='';
+  estudiantes.forEach((e,i)=>{const s=getAtt(g.id,e.id,state.currentDate);rows+='<tr><td class="n">'+(i+1)+'</td><td class="l"><b>'+esc(e.ap)+'</b> <span class="d">'+esc(e.am||'')+'</span></td><td>'+esc(e.n)+'</td><td class="c">'+esc(e.c)+'</td><td style="text-align:center;color:'+sC[s]+';background:'+sB[s]+';font-weight:700;width:90px">'+sL[s]+'</td></tr>';});
+  const css='@page{size:A4 portrait;margin:14mm 16mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9.5pt;color:#1e293b}.hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.ht{font-size:13pt;font-weight:800;color:#1e40af}.hs{font-size:8.5pt;color:#64748b;margin-top:2px}.hr{text-align:right;font-size:8.5pt;color:#64748b;line-height:1.7}.sm{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.sc{border-radius:6px;padding:8px;text-align:center;border:1px solid #e2e8f0}.sv{font-size:16pt;font-weight:800;line-height:1}.sl{font-size:7.5pt;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse}th{background:#1e40af;color:#fff;font-size:8pt;font-weight:700;text-transform:uppercase;padding:7px 10px;text-align:left}th.c{text-align:center}td{padding:6px 10px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr:nth-child(even) td{background:#f8fafc}.n{text-align:center;font-size:8.5pt;color:#94a3b8;width:28px}.l{font-size:9pt;min-width:160px}.c{text-align:center;font-size:8.5pt;color:#7c3aed;font-weight:700;width:60px}.d{font-weight:400;color:#94a3b8}.ftr{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.pb{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.np{display:none}tr{page-break-inside:avoid}}';
+  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Asistencia</title><style>'+css+'</style></head><body><button class="pb np" onclick="window.print()">Imprimir / Guardar PDF</button><div class="hdr"><div><div class="ht">Lista de Asistencia — '+esc(g.asignatura)+'</div><div class="hs">'+esc(g.grupo)+' · Liceo A-1 · Arica</div></div><div class="hr"><strong>'+dateLabel+'</strong><br>'+g.estudiantes.length+' estudiantes</div></div><div class="sm"><div class="sc"><div class="sv" style="color:#2563eb">'+g.estudiantes.length+'</div><div class="sl">Total</div></div><div class="sc" style="background:#f0fdf4"><div class="sv" style="color:#16a34a">'+present+'</div><div class="sl">Presentes</div></div><div class="sc" style="background:#fff5f5"><div class="sv" style="color:#dc2626">'+absent+'</div><div class="sl">Ausentes</div></div><div class="sc" style="background:#fffbeb"><div class="sv" style="color:#d97706">'+late+'</div><div class="sl">Atrasos</div></div></div><table><thead><tr><th class="c" style="width:28px">#</th><th>Apellidos</th><th>Nombres</th><th class="c" style="width:60px">Curso</th><th class="c" style="width:90px">Asistencia</th></tr></thead><tbody>'+rows+'</tbody></table><div class="ftr"><span>gonzaloamorenod.github.io</span><span>'+today+'</span></div></body></html>';
+  const w=window.open('','_blank','width=850,height=950');
+  if(!w){showToast('Permite ventanas emergentes','error');return;}
+  w.document.write(html);w.document.close();showToast('PDF de asistencia listo','success');
+}
+function exportStatsPDF() {
+  const cg=getCurrentGroup();if(!cg){showToast('Selecciona un grupo','error');return;}
+  const dates=getAllDates(cg.id);if(!dates.length){showToast('Sin datos de asistencia','error');return;}
+  const stats=getStudentStats(cg);const hasCal=cg.calificaciones?.columns?.length>0;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD=d=>{const[y,m,dd]=d.split('-');const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return dd+' '+meses[m-1]+' '+y;};
+  const today=fmtD(localDateStr());
+  const pctColor=p=>p>=85?'#16a34a':p>=75?'#2563eb':'#dc2626';
+  const gColor=v=>{if(v==null)return'#94a3b8';const n=parseFloat(v);if(n>=6)return'#16a34a';if(n>=5)return'#2563eb';if(n>=4)return'#d97706';return'#dc2626';};
+  const sorted=stats.filter(s=>s.recorded>0).sort((a,b)=>a.pct-b.pct);
+  const tp=sorted.reduce((a,x)=>a+x.present,0),ta=sorted.reduce((a,x)=>a+x.absent,0),tl=sorted.reduce((a,x)=>a+x.late,0),tr2=sorted.reduce((a,x)=>a+x.recorded,0);
+  const avgPct=tr2>0?Math.round((tp/tr2)*100):0;const bajo75=sorted.filter(s=>s.pct<75).length;
+  let rows='';
+  sorted.forEach((s,i)=>{
+    rows+='<tr class="'+(s.pct<75?'low-row':(i%2===0?'':'alt-row'))+'">'
+      +'<td class="td-num">'+(i+1)+'</td>'
+      +'<td class="td-ap"><strong>'+esc(s.ap)+'</strong> <span class="dim">'+esc(s.am||'')+'</span></td>'
+      +'<td>'+esc(s.n)+'</td>'
+      +'<td class="td-c">'+esc(s.c)+'</td>'
+      +'<td style="text-align:center;font-size:9.5pt;color:'+pctColor(s.pct)+';font-weight:800">'+s.pct+'%</td>'
+      +'<td class="td-num" style="color:#16a34a">'+s.present+'</td>'
+      +'<td class="td-num" style="color:#dc2626">'+s.absent+'</td>'
+      +'<td class="td-num" style="color:#d97706">'+s.late+'</td>'
+      +'<td class="td-num" style="color:#64748b">'+s.recorded+'</td>'
+      +(hasCal?'<td class="td-num" style="color:'+gColor(s.notaPromedio)+';font-weight:700">'+(s.notaPromedio||'\u2014')+'</td>':'')
+      +'</tr>';
+  });
+  const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff}.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.header-title{font-size:13pt;font-weight:800;color:#1e40af}.header-sub{font-size:8pt;color:#64748b;margin-top:2px}.header-right{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.sum-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center}.sum-val{font-size:14pt;font-weight:800;line-height:1}.sum-label{font-size:7.5pt;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse}thead th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;text-align:center}thead th.th-left{text-align:left}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr.alt-row td{background:#f8fafc}tr.low-row td{background:#fff5f5!important}.td-num{text-align:center;font-size:8.5pt}.td-ap{font-size:8.5pt}.td-c{text-align:center;font-size:8pt;color:#7c3aed;font-weight:700}.dim{font-weight:400;color:#94a3b8}.footer{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.print-btn{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.no-print{display:none}tr{page-break-inside:avoid}}';
+  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Estad\u00edsticas</title><style>'+css+'</style></head><body>'
+    +'<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>'
+    +'<div class="header"><div class="header-left"><div class="header-title">Estad\u00edsticas de Asistencia \u2014 '+esc(cg.asignatura)+' '+esc(cg.grupo)+'</div>'
+    +'<div class="header-sub">Liceo A-1 \u00b7 Arica \u00b7 '+dates.length+' clase'+(dates.length!==1?'s':'')+' ('+fmtD(dates[0])+' \u2192 '+fmtD(dates[dates.length-1])+')</div></div>'
+    +'<div class="header-right"><strong>'+today+'</strong><br>'+sorted.length+' estudiantes con registros</div></div>'
+    +'<div class="summary">'
+    +'<div class="sum-card"><div class="sum-val" style="color:#2563eb">'+avgPct+'%</div><div class="sum-label">Asistencia prom.</div></div>'
+    +'<div class="sum-card"><div class="sum-val" style="color:#16a34a">'+tp+'</div><div class="sum-label">Total presencias</div></div>'
+    +'<div class="sum-card"><div class="sum-val" style="color:#dc2626">'+ta+'</div><div class="sum-label">Total ausencias</div></div>'
+    +'<div class="sum-card"><div class="sum-val" style="color:#dc2626">'+bajo75+'</div><div class="sum-label">Bajo 75%</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th style="width:24px">#</th><th class="th-left">Apellidos</th><th class="th-left">Nombres</th><th style="width:52px">Curso</th>'
+    +'<th style="width:60px">Asist.%</th><th style="width:42px">Pres.</th><th style="width:42px">Aus.</th><th style="width:42px">Atr.</th><th style="width:42px">Clases</th>'
+    +(hasCal?'<th style="width:55px;background:#1d4ed8">Prom.Notas</th>':'')
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<div class="footer"><span>Control de Asistencia y Notas \u00b7 gonzaloamorenod.github.io</span><span>Generado: '+today+'</span></div>'
+    +'</body></html>';
+  const w=window.open('','_blank','width=1100,height=750');
+  if(!w){showToast('Permite ventanas emergentes para exportar','error');return;}
+  w.document.write(html);w.document.close();
+  showToast('PDF de estad\u00edsticas listo','success');
+}
+function exportAttendancePDF() {
+  const g=getCurrentGroup();if(!g||!g.estudiantes.length){showToast('Sin datos','error');return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD=d=>{const[y,m,dd]=d.split('-');const dias=['domingo','lunes','martes','mi\u00e9rcoles','jueves','viernes','s\u00e1bado'];const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];const dt=new Date(y,m-1,dd);return dias[dt.getDay()]+' '+dd+' de '+meses[m-1]+' de '+y;};
+  const today=fmtD(localDateStr());const dateLabel=fmtD(state.currentDate);
+  const sLabel={'present':'PRESENTE','absent':'AUSENTE','late':'ATRASO',null:'\u2014'};
+  const sColor={'present':'#16a34a','absent':'#dc2626','late':'#d97706',null:'#94a3b8'};
+  const sBg={'present':'#f0fdf4','absent':'#fff5f5','late':'#fffbeb',null:'#f8fafc'};
+  const estudiantes=[...g.estudiantes].sort((a,b)=>{
+    if(state.sortByCurso){const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;}
+    const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');
+  });
+  let present=0,absent=0,late=0;
+  estudiantes.forEach(e=>{const s=getAtt(g.id,e.id,state.currentDate);if(s==='present')present++;else if(s==='absent')absent++;else if(s==='late')late++;});
+  let rows='';
+  estudiantes.forEach((e,i)=>{
+    const s=getAtt(g.id,e.id,state.currentDate);
+    rows+='<tr>'
+      +'<td class="td-num">'+(i+1)+'</td>'
+      +'<td class="td-ap"><strong>'+esc(e.ap)+'</strong> <span class="dim">'+esc(e.am||'')+'</span></td>'
+      +'<td>'+esc(e.n)+'</td>'
+      +'<td class="td-c">'+esc(e.c)+'</td>'
+      +'<td style="text-align:center;color:'+sColor[s]+';background:'+sBg[s]+';font-weight:700;border-radius:4px">'+sLabel[s]+'</td>'
+      +'</tr>';
+  });
+  const css='@page{size:A4 portrait;margin:14mm 16mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9.5pt;color:#1e293b;background:#fff}.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.header-title{font-size:13pt;font-weight:800;color:#1e40af}.header-sub{font-size:8.5pt;color:#64748b;margin-top:2px}.header-right{text-align:right;font-size:8.5pt;color:#64748b;line-height:1.7}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.sum-card{border-radius:6px;padding:8px;text-align:center;border:1px solid #e2e8f0}.sum-val{font-size:16pt;font-weight:800;line-height:1}.sum-label{font-size:7.5pt;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse}thead th{background:#1e40af;color:#fff;font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:7px 10px;text-align:left}thead th.tc{text-align:center}td{padding:6px 10px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr:nth-child(even) td{background:#f8fafc}.td-num{text-align:center;font-size:8.5pt;color:#94a3b8;width:28px}.td-ap{font-size:9pt;min-width:160px}.td-c{text-align:center;font-size:8.5pt;color:#7c3aed;font-weight:700;width:60px}.dim{font-weight:400;color:#94a3b8}.footer{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.print-btn{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.no-print{display:none}tr{page-break-inside:avoid}}';
+  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Asistencia</title><style>'+css+'</style></head><body>'
+    +'<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>'
+    +'<div class="header"><div class="header-left"><div class="header-title">Lista de Asistencia \u2014 '+esc(g.asignatura)+'</div><div class="header-sub">'+esc(g.grupo)+' \u00b7 Liceo A-1 \u00b7 Arica</div></div>'
+    +'<div class="header-right"><strong>'+dateLabel+'</strong><br>'+g.estudiantes.length+' estudiantes</div></div>'
+    +'<div class="summary">'
+    +'<div class="sum-card"><div class="sum-val" style="color:#2563eb">'+g.estudiantes.length+'</div><div class="sum-label">Total</div></div>'
+    +'<div class="sum-card" style="background:#f0fdf4"><div class="sum-val" style="color:#16a34a">'+present+'</div><div class="sum-label">Presentes</div></div>'
+    +'<div class="sum-card" style="background:#fff5f5"><div class="sum-val" style="color:#dc2626">'+absent+'</div><div class="sum-label">Ausentes</div></div>'
+    +'<div class="sum-card" style="background:#fffbeb"><div class="sum-val" style="color:#d97706">'+late+'</div><div class="sum-label">Atrasos</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th class="tc" style="width:28px">#</th><th>Apellidos</th><th>Nombres</th><th class="tc" style="width:60px">Curso</th><th class="tc" style="width:90px">Asistencia</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>'
+    +'<div class="footer"><span>Control de Asistencia y Notas \u00b7 gonzaloamorenod.github.io</span><span>Generado: '+today+'</span></div>'
+    +'</body></html>';
+  const w=window.open('','_blank','width=850,height=950');
+  if(!w){showToast('Permite ventanas emergentes para exportar','error');return;}
+  w.document.write(html);w.document.close();
+  showToast('PDF de asistencia listo','success');
 }
 function updateDashboard() {
   const cg=getCurrentGroup();const el=document.getElementById('dashboardContent');
@@ -1468,16 +1674,9 @@ function renderRegistroClase() {
     Object.entries(g.classLogs).forEach(([date, log]) => {
       if (!log || (!log.objetivo && !log.temas && !log.obs)) return;
       allLogs.push({
-        date,
-        groupId: g.id,
-        nivel: g.nivel,
-        asignatura: g.asignatura,
-        grupo: g.grupo,
-        objetivo: log.objetivo || '',
-        temas: log.temas || '',
-        obs: log.obs || '',
-        tarea: log.tarea || '',
-        destacado: !!(log.destacado)
+        date,groupId:g.id,nivel:g.nivel,asignatura:g.asignatura,grupo:g.grupo,
+        objetivo:log.objetivo||'',temas:log.temas||'',obs:log.obs||'',
+        tarea:log.tarea||'',destacado:!!(log.destacado)
       });
     });
   });
@@ -1547,18 +1746,17 @@ function renderRegistroClase() {
     if (log.objetivo) partes.push(`<div class="rc-field"><span class="rc-field-label">Objetivo:</span>${escapeHtml(log.objetivo)}</div>`);
     if (log.temas)    partes.push(`<div class="rc-field"><span class="rc-field-label">Temas:</span>${escapeHtml(log.temas)}</div>`);
     if (log.obs)      partes.push(`<div class="rc-field"><span class="rc-field-label">Obs.:</span>${escapeHtml(log.obs)}</div>`);
-    if (log.tarea)    partes.push(`<div class="rc-tarea"><span class="rc-tarea-label">📌 Pendiente:</span>${escapeHtml(log.tarea)}</div>`);
+    if (log.tarea)    partes.push(`<div class="rc-tarea"><span class="rc-tarea-label">Pendiente:</span>${escapeHtml(log.tarea)}</div>`);
     const rowClass = log.destacado ? ' class="rc-destacado-row"' : '';
-    const starClass = log.destacado ? 'on' : '';
     html += `<tr${rowClass}>
-      <td class="rc-date">${formatDateES(log.date)}${log.destacado?'<br><span class="rc-badge-dest">⭐ destacado</span>':''}</td>
+      <td class="rc-date">${formatDateES(log.date)}${log.destacado?'<br><span class="rc-badge-dest">&#11088; destacado</span>':''}</td>
       <td class="rc-nivel">${log.nivel}° Medio</td>
       <td class="rc-asignatura">${escapeHtml(log.asignatura)}</td>
       <td class="rc-grupo">${escapeHtml(log.grupo)}</td>
       <td class="rc-log">${partes.join('')}</td>
       <td class="rc-actions">
-        <button class="rc-star ${starClass}" onclick="toggleDestacado('${log.groupId}','${log.date}')" title="${log.destacado?'Quitar destaque':'Destacar registro'}">⭐</button>
-        <button class="rc-edit-btn" onclick="editClassLog('${log.groupId}','${log.date}')" title="Editar registro">✏️ Editar</button>
+        <button class="rc-star ${log.destacado?'on':''}" onclick="toggleDestacado('${log.groupId}','${log.date}')" title="${log.destacado?'Quitar destaque':'Destacar'}">&#11088;</button>
+        <button class="rc-edit-btn" onclick="editClassLog('${log.groupId}','${log.date}')">&#9999;&#65039; Editar</button>
       </td>
     </tr>`;
   });
@@ -1568,110 +1766,69 @@ function renderRegistroClase() {
 }
 
 function exportRegistroClasePDF() {
-  const allLogs = [];
-  state.groups.forEach(g => {
-    if (!g.classLogs) return;
-    Object.entries(g.classLogs).forEach(([date, log]) => {
-      if (!log || (!log.objetivo && !log.temas && !log.obs && !log.tarea)) return;
-      allLogs.push({ date, groupId: g.id, nivel: g.nivel, asignatura: g.asignatura, grupo: g.grupo, objetivo: log.objetivo||'', temas: log.temas||'', obs: log.obs||'', tarea: log.tarea||'', destacado: !!(log.destacado) });
+  const allLogs=[];
+  state.groups.forEach(g=>{
+    if(!g.classLogs)return;
+    Object.entries(g.classLogs).forEach(([date,log])=>{
+      if(!log||(!log.objetivo&&!log.temas&&!log.obs&&!log.tarea))return;
+      allLogs.push({date,groupId:g.id,nivel:g.nivel,asignatura:g.asignatura,grupo:g.grupo,
+        objetivo:log.objetivo||'',temas:log.temas||'',obs:log.obs||'',tarea:log.tarea||'',destacado:!!(log.destacado)});
     });
   });
-  allLogs.sort((a,b) => { if(b.destacado!==a.destacado) return b.destacado?1:-1; return b.date.localeCompare(a.date); });
-  if (!allLogs.length) { showToast('No hay registros para exportar','error'); return; }
-
-  const filtroNivel  = document.getElementById('rcFiltroNivel')?.value  || '';
-  const filtroGrupo  = document.getElementById('rcFiltroGrupo')?.value  || '';
-  const filtroBuscar = (document.getElementById('rcFiltroBuscar')?.value || '').toLowerCase();
-  const logs = allLogs.filter(log => {
-    if (filtroNivel && log.nivel !== filtroNivel) return false;
-    if (filtroGrupo && log.asignatura !== filtroGrupo) return false;
-    if (filtroBuscar && ![log.asignatura,log.grupo,log.objetivo,log.temas,log.obs,log.tarea].some(t=>t.toLowerCase().includes(filtroBuscar))) return false;
+  allLogs.sort((a,b)=>b.date.localeCompare(a.date));
+  if(!allLogs.length){showToast('No hay registros para exportar','error');return;}
+  const filtroNivel=document.getElementById('rcFiltroNivel')?.value||'';
+  const filtroGrupo=document.getElementById('rcFiltroGrupo')?.value||'';
+  const filtroBuscar=(document.getElementById('rcFiltroBuscar')?.value||'').toLowerCase();
+  const logs=allLogs.filter(log=>{
+    if(filtroNivel&&log.nivel!==filtroNivel)return false;
+    if(filtroGrupo&&log.asignatura!==filtroGrupo)return false;
+    if(filtroBuscar&&![log.asignatura,log.grupo,log.objetivo,log.temas,log.obs,log.tarea].some(t=>t.toLowerCase().includes(filtroBuscar)))return false;
     return true;
   });
-  if (!logs.length) { showToast('Sin registros con los filtros actuales','error'); return; }
-
-  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const fmtD = d => { const [y,m,dd]=d.split('-'); const dias=['domingo','lunes','martes','mi\u00e9rcoles','jueves','viernes','s\u00e1bado']; const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const dt=new Date(y,m-1,dd); return dias[dt.getDay()]+' '+dd+' de '+meses[m-1]+' de '+y; };
-  const today = fmtD(localDateStr());
-  const filtroLabel = [filtroNivel?filtroNivel+'\u00b0 Medio':'', filtroGrupo||'', filtroBuscar?'"'+filtroBuscar+'"':''].filter(Boolean).join(' \u00b7 ') || 'Todos los registros';
-
-  const byDate = {};
-  logs.forEach(log => { if(!byDate[log.date]) byDate[log.date]=[]; byDate[log.date].push(log); });
-  const sortedDates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
-
-  let rows = '';
-  let rowNum = 0;
-  sortedDates.forEach(date => {
-    const dayLogs = byDate[date];
-    dayLogs.forEach((log, i) => {
+  if(!logs.length){showToast('Sin registros con los filtros actuales','error');return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD=d=>{const[y,m,dd]=d.split('-');const dias=['dom','lun','mar','mi\u00e9','jue','vie','s\u00e1b'];const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];const dt=new Date(y,m-1,dd);return dias[dt.getDay()]+' '+dd+' '+meses[m-1]+' '+y;};
+  const today=fmtD(localDateStr());
+  const filtroLabel=[filtroNivel?filtroNivel+'\u00b0 Medio':'',filtroGrupo||'',filtroBuscar?'"'+filtroBuscar+'"':''].filter(Boolean).join(' \u00b7 ')||'Todos los registros';
+  const byDate={};
+  logs.forEach(log=>{if(!byDate[log.date])byDate[log.date]=[];byDate[log.date].push(log);});
+  const sortedDates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  let rows='',rowNum=0;
+  sortedDates.forEach(date=>{
+    const dayLogs=byDate[date];
+    dayLogs.forEach((log,i)=>{
       rowNum++;
-      const dest = log.destacado;
-      const rClass = dest ? 'dest-row' : (rowNum%2===0 ? 'alt-row' : '');
-      rows += '<tr class="'+rClass+'">';
-      if (i===0) rows += '<td class="td-fecha'+(dest?' dest-fecha':'')+'" rowspan="'+dayLogs.length+'">'+esc(fmtD(date))+'</td>';
-      rows += '<td class="td-nivel">'+esc(log.nivel)+'\u00b0 M</td>';
-      rows += '<td class="td-asig">'+(dest?'<span class="dest-star">\u2605</span> ':'')+'<strong>'+esc(log.asignatura)+'</strong></td>';
-      rows += '<td class="td-grupo">'+esc(log.grupo)+'</td>';
-      rows += '<td class="td-contenido">';
-      if (log.objetivo) rows += '<div class="campo"><span class="campo-label">Objetivo</span>'+esc(log.objetivo)+'</div>';
-      if (log.temas)    rows += '<div class="campo"><span class="campo-label">Temas</span>'+esc(log.temas)+'</div>';
-      if (log.obs)      rows += '<div class="campo"><span class="campo-label">Obs.</span>'+esc(log.obs)+'</div>';
-      if (log.tarea)    rows += '<div class="campo tarea-campo"><span class="campo-label tarea-label">\ud83d\udccc Pendiente</span>'+esc(log.tarea)+'</div>';
-      rows += '</td></tr>';
+      const dest=log.destacado;
+      const rClass=dest?'dest-row':(rowNum%2===0?'alt-row':'');
+      rows+='<tr class="'+rClass+'">';
+      if(i===0)rows+='<td class="td-fecha'+(dest?' dest-fecha':'')+'" rowspan="'+dayLogs.length+'">'+esc(fmtD(date))+'</td>';
+      rows+='<td class="td-nivel">'+esc(log.nivel)+'\u00b0 M</td>';
+      rows+='<td class="td-asig">'+(dest?'<span class="dest-star">&#9733;</span> ':'')+'<strong>'+esc(log.asignatura)+'</strong></td>';
+      rows+='<td class="td-grupo">'+esc(log.grupo)+'</td>';
+      rows+='<td class="td-contenido">';
+      if(log.objetivo)rows+='<div class="campo"><span class="campo-label">Objetivo</span>'+esc(log.objetivo)+'</div>';
+      if(log.temas)rows+='<div class="campo"><span class="campo-label">Temas</span>'+esc(log.temas)+'</div>';
+      if(log.obs)rows+='<div class="campo"><span class="campo-label">Obs.</span>'+esc(log.obs)+'</div>';
+      if(log.tarea)rows+='<div class="campo tarea-campo"><span class="campo-label tarea-label">Pendiente</span>'+esc(log.tarea)+'</div>';
+      rows+='</td></tr>';
     });
-    rows += '<tr class="sep-row"><td colspan="5"></td></tr>';
+    rows+='<tr class="sep-row"><td colspan="5"></td></tr>';
   });
-
-  const html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Registro de Clases</title><style>'
-    + '@page{size:A4 landscape;margin:13mm 15mm}'
-    + '*{box-sizing:border-box;margin:0;padding:0}'
-    + 'body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff}'
-    + '.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}'
-    + '.header-title{font-size:14pt;font-weight:800;color:#1e40af}'
-    + '.header-sub{font-size:8.5pt;color:#64748b;margin-top:2px}'
-    + '.header-right{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}'
-    + '.header-right strong{color:#1e293b;font-size:8.5pt}'
-    + '.filter-bar{background:#f1f5f9;border-radius:4px;padding:4px 10px;font-size:7.5pt;color:#475569;margin-bottom:11px;display:flex;justify-content:space-between}'
-    + '.filter-bar strong{color:#1e40af}'
-    + 'table{width:100%;border-collapse:collapse}'
-    + 'thead th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;text-align:left}'
-    + 'td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}'
-    + 'tr.alt-row td{background:#f8fafc}'
-    + 'tr.sep-row td{height:5px;background:#fff;border:none}'
-    + '.td-fecha{font-weight:700;font-size:8pt;color:#1e40af;white-space:nowrap;vertical-align:middle;background:#eff6ff;border-right:2px solid #bfdbfe;width:115px;text-align:center;line-height:1.55}'
-    + '.td-nivel{font-size:7.5pt;color:#64748b;white-space:nowrap;text-align:center;width:38px}'
-    + '.td-asig{font-size:8.5pt;width:165px}'
-    + '.td-grupo{font-size:8pt;color:#7c3aed;font-weight:700;white-space:nowrap;text-align:center;width:68px}'
-    + '.td-contenido{font-size:8.5pt;line-height:1.55}'
-    + '.campo{margin-bottom:2px}'
-    + '.campo-label{display:inline-block;font-size:7pt;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;margin-right:5px}'
-    + '.tarea-campo{margin-top:4px;background:#fffbeb;border-left:3px solid #f59e0b;padding:3px 6px;border-radius:0 3px 3px 0}'
-    + '.tarea-label{color:#b45309!important}'
-    + 'tr.dest-row td{background:#fffbeb!important}'
-    + '.td-fecha.dest-fecha{background:#fef3c7!important;border-right-color:#f59e0b!important;color:#b45309!important}'
-    + '.dest-star{color:#f59e0b}'
-    + '.footer{margin-top:12px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}'
-    + '.print-btn{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}'
-    + '.print-btn:hover{background:#1d4ed8}'
-    + '@media print{.no-print{display:none}tr{page-break-inside:avoid}}'
-    + '</style></head><body>'
-    + '<button class="print-btn no-print" onclick="window.print()">\ud83d\udda8\ufe0f Imprimir / Guardar PDF</button>'
-    + '<div class="header"><div class="header-left"><div class="header-title">\ud83d\udccb Registro de Clases</div><div class="header-sub">Liceo A-1 \u00b7 Arica \u00b7 Control de Asistencia y Notas</div></div>'
-    + '<div class="header-right"><strong>Exportado el '+today+'</strong><br>'+logs.length+' registro'+(logs.length!==1?'s':'')+' \u00b7 '+sortedDates.length+' fecha'+(sortedDates.length!==1?'s':'')+'</div></div>'
-    + '<div class="filter-bar"><span>Filtro: <strong>'+esc(filtroLabel)+'</strong></span><span>gonzaloamorenod@gmail.com</span></div>'
-    + '<table><thead><tr>'
-    + '<th style="width:115px">Fecha</th><th style="width:38px">Nivel</th><th style="width:165px">Asignatura / Electivo</th><th style="width:68px">Grupo</th><th>Contenido de la Clase</th>'
-    + '</tr></thead><tbody>'+rows+'</tbody></table>'
-    + '<div class="footer"><span>Control de Asistencia y Notas \u00b7 gonzaloamorenod.github.io</span><span>Generado: '+today+'</span></div>'
-    + '</body></html>';
-
-  const w = window.open('','_blank','width=1100,height=750');
-  if (!w) { showToast('Permite las ventanas emergentes para exportar','error'); return; }
-  w.document.write(html);
-  w.document.close();
-  showToast('PDF listo \u2014 usa el bot\u00f3n Imprimir / Guardar PDF','success');
+  const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff}.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.header-title{font-size:13pt;font-weight:800;color:#1e40af}.header-sub{font-size:8pt;color:#64748b;margin-top:2px}.header-right{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.filter-bar{background:#f1f5f9;border-radius:4px;padding:4px 10px;font-size:7.5pt;color:#475569;margin-bottom:10px;display:flex;justify-content:space-between}.filter-bar strong{color:#1e40af}table{width:100%;border-collapse:collapse}thead th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;text-align:left}td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}tr.alt-row td{background:#f8fafc}tr.sep-row td{height:5px;background:#fff;border:none}.td-fecha{font-weight:700;font-size:8pt;color:#1e40af;white-space:nowrap;vertical-align:middle;background:#eff6ff;border-right:2px solid #bfdbfe;width:110px;text-align:center;line-height:1.55}.td-nivel{font-size:7.5pt;color:#64748b;white-space:nowrap;text-align:center;width:36px}.td-asig{font-size:8.5pt;width:160px}.td-grupo{font-size:8pt;color:#7c3aed;font-weight:700;white-space:nowrap;text-align:center;width:65px}.td-contenido{font-size:8.5pt;line-height:1.55}.campo{margin-bottom:2px}.campo-label{display:inline-block;font-size:7pt;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;margin-right:5px}.tarea-campo{margin-top:4px;background:#fffbeb;border-left:3px solid #f59e0b;padding:3px 6px;border-radius:0 3px 3px 0}.tarea-label{color:#b45309!important}tr.dest-row td{background:#fffbeb!important}.td-fecha.dest-fecha{background:#fef3c7!important;border-right-color:#f59e0b!important;color:#b45309!important}.dest-star{color:#f59e0b}.footer{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.print-btn{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.no-print{display:none}tr{page-break-inside:avoid}}';
+  const html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Registro de Clases</title><style>'+css+'</style></head><body>'
+    +'<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>'
+    +'<div class="header"><div class="header-left"><div class="header-title">Registro de Clases</div><div class="header-sub">Liceo A-1 \u00b7 Arica \u00b7 Control de Asistencia y Notas</div></div>'
+    +'<div class="header-right"><strong>Exportado el '+today+'</strong><br>'+logs.length+' registro'+(logs.length!==1?'s':'')+' \u00b7 '+sortedDates.length+' fecha'+(sortedDates.length!==1?'s':'')+'</div></div>'
+    +'<div class="filter-bar"><span>Filtro: <strong>'+esc(filtroLabel)+'</strong></span><span>gonzaloamorenod@gmail.com</span></div>'
+    +'<table><thead><tr><th style="width:110px">Fecha</th><th style="width:36px">Nivel</th><th style="width:160px">Asignatura</th><th style="width:65px">Grupo</th><th>Contenido de la Clase</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<div class="footer"><span>Control de Asistencia y Notas \u00b7 gonzaloamorenod.github.io</span><span>Generado: '+today+'</span></div>'
+    +'</body></html>';
+  const w=window.open('','_blank','width=1100,height=750');
+  if(!w){showToast('Permite ventanas emergentes para exportar','error');return;}
+  w.document.write(html);w.document.close();
+  showToast('PDF de Registro de Clases listo','success');
 }
-
 // ═══════════════════════════════════════════════════════════
 //  BACKUP Y RESTAURACIÓN
 // ═══════════════════════════════════════════════════════════
@@ -1768,11 +1925,11 @@ function initAppUI() {
     btn.textContent=state.sortByCurso?'⇅ Curso ✓':'⇅ Curso';
     updateAttendance();
   });
-  document.getElementById('allPresentBtn').addEventListener('click',()=>{const g=getCurrentGroup();if(!g)return;g.estudiantes.forEach(e=>{if(!g.asistencia)g.asistencia={};if(!g.asistencia[state.currentDate])g.asistencia[state.currentDate]={};g.asistencia[state.currentDate][e.id]='present';});saveData();updateAttendance();});
-  document.getElementById('csvExportBtn').addEventListener('click',exportToCSV);
+  document.getElementById('attPdfBtn').addEventListener('click',exportAttendancePDF);
+  document.getElementById('csvExportBtn').addEventListener('click',showExportModal);
   document.getElementById('csvImportBtn').addEventListener('click',()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.csv';inp.onchange=handleCSVImport;inp.click();});
   document.getElementById('deleteGroupBtn').addEventListener('click',deleteCurrentGroup);
-  document.getElementById('gradesExportBtn').addEventListener('click',exportGradesCSV);
+  document.getElementById('gradesPdfBtn').addEventListener('click',exportGradesPDF);
   document.getElementById('gradesExportCursoBtn').addEventListener('click',exportGradesCSVFiltrado);
   document.getElementById('gradesImportBtn').addEventListener('click',()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.csv';inp.onchange=importGradesCSV;inp.click();});
   document.getElementById('gradesNivelSelect').addEventListener('change',e=>{state.currentNivel=e.target.value;const groups=state.groups.filter(g=>g.nivel===state.currentNivel);state.currentGroupId=groups.length?groups[0].id:null;syncGradesSelects();renderCalificaciones();});
