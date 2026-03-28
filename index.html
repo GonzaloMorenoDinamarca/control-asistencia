@@ -1514,7 +1514,7 @@ function renderRegistroClase() {
     <input type="text" id="rcFiltroBuscar" class="date-input" style="max-width:200px"
       placeholder="🔍 Buscar..." value="${escapeHtml(filtroBuscar)}"
       oninput="renderRegistroClase()">
-    <button class="btn btn-sm" onclick="exportRegistroClaseCSV()" title="Exportar a CSV">↓ CSV</button>
+    <button class="btn btn-sm" onclick="exportRegistroClasePDF()" title="Exportar a PDF">↓ PDF</button>
     <span class="rc-count">${filtrados.length} registro${filtrados.length !== 1 ? 's' : ''}</span>
   </div>`;
 
@@ -1567,29 +1567,109 @@ function renderRegistroClase() {
   el.innerHTML = html;
 }
 
-function exportRegistroClaseCSV() {
+function exportRegistroClasePDF() {
   const allLogs = [];
   state.groups.forEach(g => {
     if (!g.classLogs) return;
     Object.entries(g.classLogs).forEach(([date, log]) => {
-      if (!log || (!log.objetivo && !log.temas && !log.obs)) return;
-      allLogs.push({ date, nivel: g.nivel, asignatura: g.asignatura, grupo: g.grupo, objetivo: log.objetivo||'', temas: log.temas||'', obs: log.obs||'' });
+      if (!log || (!log.objetivo && !log.temas && !log.obs && !log.tarea)) return;
+      allLogs.push({ date, groupId: g.id, nivel: g.nivel, asignatura: g.asignatura, grupo: g.grupo, objetivo: log.objetivo||'', temas: log.temas||'', obs: log.obs||'', tarea: log.tarea||'', destacado: !!(log.destacado) });
     });
   });
-  allLogs.sort((a, b) => b.date.localeCompare(a.date));
-  if (!allLogs.length) { showToast('No hay registros para exportar', 'error'); return; }
+  allLogs.sort((a,b) => { if(b.destacado!==a.destacado) return b.destacado?1:-1; return b.date.localeCompare(a.date); });
+  if (!allLogs.length) { showToast('No hay registros para exportar','error'); return; }
 
-  let csv = 'Fecha;Nivel;Electivo;Grupo;Objetivo;Temas;Observaciones\n';
-  allLogs.forEach(log => {
-    csv += log.date + ';"' + log.nivel + '° Medio";"' + log.asignatura + '";"' + log.grupo + '";"' + log.objetivo.replace(/"/g,'""') + '";"' + log.temas.replace(/"/g,'""') + '";"' + log.obs.replace(/"/g,'""') + '"\n';
+  const filtroNivel  = document.getElementById('rcFiltroNivel')?.value  || '';
+  const filtroGrupo  = document.getElementById('rcFiltroGrupo')?.value  || '';
+  const filtroBuscar = (document.getElementById('rcFiltroBuscar')?.value || '').toLowerCase();
+  const logs = allLogs.filter(log => {
+    if (filtroNivel && log.nivel !== filtroNivel) return false;
+    if (filtroGrupo && log.asignatura !== filtroGrupo) return false;
+    if (filtroBuscar && ![log.asignatura,log.grupo,log.objetivo,log.temas,log.obs,log.tarea].some(t=>t.toLowerCase().includes(filtroBuscar))) return false;
+    return true;
+  });
+  if (!logs.length) { showToast('Sin registros con los filtros actuales','error'); return; }
+
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtD = d => { const [y,m,dd]=d.split('-'); const dias=['domingo','lunes','martes','mi\u00e9rcoles','jueves','viernes','s\u00e1bado']; const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const dt=new Date(y,m-1,dd); return dias[dt.getDay()]+' '+dd+' de '+meses[m-1]+' de '+y; };
+  const today = fmtD(localDateStr());
+  const filtroLabel = [filtroNivel?filtroNivel+'\u00b0 Medio':'', filtroGrupo||'', filtroBuscar?'"'+filtroBuscar+'"':''].filter(Boolean).join(' \u00b7 ') || 'Todos los registros';
+
+  const byDate = {};
+  logs.forEach(log => { if(!byDate[log.date]) byDate[log.date]=[]; byDate[log.date].push(log); });
+  const sortedDates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+
+  let rows = '';
+  let rowNum = 0;
+  sortedDates.forEach(date => {
+    const dayLogs = byDate[date];
+    dayLogs.forEach((log, i) => {
+      rowNum++;
+      const dest = log.destacado;
+      const rClass = dest ? 'dest-row' : (rowNum%2===0 ? 'alt-row' : '');
+      rows += '<tr class="'+rClass+'">';
+      if (i===0) rows += '<td class="td-fecha'+(dest?' dest-fecha':'')+'" rowspan="'+dayLogs.length+'">'+esc(fmtD(date))+'</td>';
+      rows += '<td class="td-nivel">'+esc(log.nivel)+'\u00b0 M</td>';
+      rows += '<td class="td-asig">'+(dest?'<span class="dest-star">\u2605</span> ':'')+'<strong>'+esc(log.asignatura)+'</strong></td>';
+      rows += '<td class="td-grupo">'+esc(log.grupo)+'</td>';
+      rows += '<td class="td-contenido">';
+      if (log.objetivo) rows += '<div class="campo"><span class="campo-label">Objetivo</span>'+esc(log.objetivo)+'</div>';
+      if (log.temas)    rows += '<div class="campo"><span class="campo-label">Temas</span>'+esc(log.temas)+'</div>';
+      if (log.obs)      rows += '<div class="campo"><span class="campo-label">Obs.</span>'+esc(log.obs)+'</div>';
+      if (log.tarea)    rows += '<div class="campo tarea-campo"><span class="campo-label tarea-label">\ud83d\udccc Pendiente</span>'+esc(log.tarea)+'</div>';
+      rows += '</td></tr>';
+    });
+    rows += '<tr class="sep-row"><td colspan="5"></td></tr>';
   });
 
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `registro_clases_${localDateStr()}.csv`;
-  a.click();
-  showToast('Registro exportado', 'success');
+  const html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Registro de Clases</title><style>'
+    + '@page{size:A4 landscape;margin:13mm 15mm}'
+    + '*{box-sizing:border-box;margin:0;padding:0}'
+    + 'body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff}'
+    + '.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}'
+    + '.header-title{font-size:14pt;font-weight:800;color:#1e40af}'
+    + '.header-sub{font-size:8.5pt;color:#64748b;margin-top:2px}'
+    + '.header-right{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}'
+    + '.header-right strong{color:#1e293b;font-size:8.5pt}'
+    + '.filter-bar{background:#f1f5f9;border-radius:4px;padding:4px 10px;font-size:7.5pt;color:#475569;margin-bottom:11px;display:flex;justify-content:space-between}'
+    + '.filter-bar strong{color:#1e40af}'
+    + 'table{width:100%;border-collapse:collapse}'
+    + 'thead th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;text-align:left}'
+    + 'td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}'
+    + 'tr.alt-row td{background:#f8fafc}'
+    + 'tr.sep-row td{height:5px;background:#fff;border:none}'
+    + '.td-fecha{font-weight:700;font-size:8pt;color:#1e40af;white-space:nowrap;vertical-align:middle;background:#eff6ff;border-right:2px solid #bfdbfe;width:115px;text-align:center;line-height:1.55}'
+    + '.td-nivel{font-size:7.5pt;color:#64748b;white-space:nowrap;text-align:center;width:38px}'
+    + '.td-asig{font-size:8.5pt;width:165px}'
+    + '.td-grupo{font-size:8pt;color:#7c3aed;font-weight:700;white-space:nowrap;text-align:center;width:68px}'
+    + '.td-contenido{font-size:8.5pt;line-height:1.55}'
+    + '.campo{margin-bottom:2px}'
+    + '.campo-label{display:inline-block;font-size:7pt;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;margin-right:5px}'
+    + '.tarea-campo{margin-top:4px;background:#fffbeb;border-left:3px solid #f59e0b;padding:3px 6px;border-radius:0 3px 3px 0}'
+    + '.tarea-label{color:#b45309!important}'
+    + 'tr.dest-row td{background:#fffbeb!important}'
+    + '.td-fecha.dest-fecha{background:#fef3c7!important;border-right-color:#f59e0b!important;color:#b45309!important}'
+    + '.dest-star{color:#f59e0b}'
+    + '.footer{margin-top:12px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}'
+    + '.print-btn{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}'
+    + '.print-btn:hover{background:#1d4ed8}'
+    + '@media print{.no-print{display:none}tr{page-break-inside:avoid}}'
+    + '</style></head><body>'
+    + '<button class="print-btn no-print" onclick="window.print()">\ud83d\udda8\ufe0f Imprimir / Guardar PDF</button>'
+    + '<div class="header"><div class="header-left"><div class="header-title">\ud83d\udccb Registro de Clases</div><div class="header-sub">Liceo A-1 \u00b7 Arica \u00b7 Control de Asistencia y Notas</div></div>'
+    + '<div class="header-right"><strong>Exportado el '+today+'</strong><br>'+logs.length+' registro'+(logs.length!==1?'s':'')+' \u00b7 '+sortedDates.length+' fecha'+(sortedDates.length!==1?'s':'')+'</div></div>'
+    + '<div class="filter-bar"><span>Filtro: <strong>'+esc(filtroLabel)+'</strong></span><span>gonzaloamorenod@gmail.com</span></div>'
+    + '<table><thead><tr>'
+    + '<th style="width:115px">Fecha</th><th style="width:38px">Nivel</th><th style="width:165px">Asignatura / Electivo</th><th style="width:68px">Grupo</th><th>Contenido de la Clase</th>'
+    + '</tr></thead><tbody>'+rows+'</tbody></table>'
+    + '<div class="footer"><span>Control de Asistencia y Notas \u00b7 gonzaloamorenod.github.io</span><span>Generado: '+today+'</span></div>'
+    + '</body></html>';
+
+  const w = window.open('','_blank','width=1100,height=750');
+  if (!w) { showToast('Permite las ventanas emergentes para exportar','error'); return; }
+  w.document.write(html);
+  w.document.close();
+  showToast('PDF listo \u2014 usa el bot\u00f3n Imprimir / Guardar PDF','success');
 }
 
 // ═══════════════════════════════════════════════════════════
