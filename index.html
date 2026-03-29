@@ -14,6 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root,[data-theme="dark"]{
   --bg:#0f1117;--bg2:#181b25;--bg3:#1e2230;--bg4:#252a3a;
@@ -1517,55 +1518,50 @@ function exportStatsPDF() {
 }
 function exportNomina() {
   const g=getCurrentGroup();if(!g||!g.estudiantes.length){showToast('Sin estudiantes','error');return;}
+  if(typeof XLSX==='undefined'){showToast('Librería no disponible aún, reintenta','error');return;}
   const estudiantes=[...g.estudiantes].sort((a,b)=>{
     const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;
     const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;
     return(a.am||'').localeCompare(b.am||'','es');
   });
-  // XLS HTML with exact template formatting
-  // Header: bg #2C3E50, white text, bold, size 11, centered
-  // Data rows: alternating #FFFFFF / #EAF4FB, size 10
-  // All cells: thin border #BDC3C7
-  // Cols A(N°)=center, B(Ap.Pat)=left, C(Ap.Mat)=left, D(Nombres)=left, E(Curso)=center
-  const BDR='1px solid #BDC3C7';
-  const cellBase=`border:${BDR};font-family:Arial,sans-serif;vertical-align:middle;padding:3px 6px;`;
-  const hdCell=cellBase+'background:#2C3E50;color:#fff;font-weight:bold;font-size:11pt;text-align:center;height:22px;';
-  const mkRow=(i,e)=>{
-    const bg=i%2===0?'#FFFFFF':'#EAF4FB';
-    const dc=cellBase+'background:'+bg+';font-size:10pt;height:18px;';
-    const ctr=dc+'text-align:center;';const lft=dc+'text-align:left;';
-    return'<tr>'
-      +'<td style="'+ctr+'width:38px">'+(i+1)+'</td>'
-      +'<td style="'+lft+'width:140px">'+esc(e.ap)+'</td>'
-      +'<td style="'+lft+'width:140px">'+esc(e.am||'')+'</td>'
-      +'<td style="'+lft+'width:155px">'+esc(e.n)+'</td>'
-      +'<td style="'+ctr+'width:55px">'+esc(e.c)+'</td>'
-      +'</tr>';
-  };
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const rows=estudiantes.map((e,i)=>mkRow(i,e)).join('');
-  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="UTF-8"><!--[if gte mso 9]><xml>
-<x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-<x:Name>Lista_Estudiantes</x:Name>
-<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><\/head>
-<body><table border="0" cellspacing="0" cellpadding="0">
-<colgroup><col width="38"/><col width="140"/><col width="140"/><col width="155"/><col width="55"/></colgroup>
-<thead><tr>
-<th style="${hdCell}width:38px">N° Lista</th>
-<th style="${hdCell}width:140px;text-align:center">Apellido Paterno</th>
-<th style="${hdCell}width:140px;text-align:center">Apellido Materno</th>
-<th style="${hdCell}width:155px;text-align:center">Nombre(s)</th>
-<th style="${hdCell}width:55px">Curso</th>
-</tr></thead>
-<tbody>${rows}</tbody>
-</table><\/body><\/html>`;
-  const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='Nomina_'+g.asignatura.replace(/[^a-zA-Z0-9]/g,'_')+'_'+g.grupo.replace(/[^a-zA-Z0-9]/g,'_')+'.xls';
-  a.click();URL.revokeObjectURL(a.href);
+  const wb=XLSX.utils.book_new();
+  // Build data array
+  const rows=estudiantes.map((e,i)=>[i+1, e.ap||'', e.am||'', e.n||'', e.c||'']);
+  const wsData=[['N° Lista','Apellido Paterno','Apellido Materno','Nombre(s)','Curso'],...rows];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  // Column widths (matching template: A=10, B=22, C=22, D=24, E=10 chars)
+  ws['!cols']=[{wch:10},{wch:22},{wch:22},{wch:24},{wch:10}];
+  // Row heights (header=22pt, data=18pt)
+  ws['!rows']=[{hpt:22},...rows.map(()=>({hpt:18}))];
+  // Apply styles using XLSX.utils
+  const totalRows=wsData.length;
+  const cols=['A','B','C','D','E'];
+  // Header style: dark bg #2C3E50, white bold text, centered
+  const hdrFill={patternType:'solid',fgColor:{rgb:'2C3E50'}};
+  const hdrFont={bold:true,sz:11,color:{rgb:'FFFFFF'},name:'Arial'};
+  const hdrAlign={horizontal:'center',vertical:'center'};
+  const thinBorder={style:'thin',color:{rgb:'BDC3C7'}};
+  const bdr={top:thinBorder,bottom:thinBorder,left:thinBorder,right:thinBorder};
+  const dataAlignC={horizontal:'center',vertical:'center'};
+  const dataAlignL={horizontal:'left',vertical:'center'};
+  cols.forEach(col=>{
+    const cell=ws[col+'1'];if(!cell)return;
+    cell.s={fill:hdrFill,font:hdrFont,alignment:hdrAlign,border:bdr};
+  });
+  // Data rows: alternating white / #EAF4FB, border, font Arial 10
+  for(let r=2;r<=totalRows;r++){
+    const bg=(r%2===0)?'FFFFFF':'EAF4FB';
+    const fill={patternType:'solid',fgColor:{rgb:bg}};
+    const font={sz:10,name:'Arial'};
+    cols.forEach((col,ci)=>{
+      const ref=col+r;const cell=ws[ref];if(!cell)return;
+      const isCenter=(ci===0||ci===4);
+      cell.s={fill,font,alignment:isCenter?dataAlignC:dataAlignL,border:bdr};
+    });
+  }
+  XLSX.utils.book_append_sheet(wb,ws,'Lista_Estudiantes');
+  const safeName=n=>n.replace(/[^a-zA-Z0-9À-ÿ\s\-_]/g,'').trim().replace(/\s+/g,'_');
+  XLSX.writeFile(wb,'Nomina_'+safeName(g.asignatura)+'_'+safeName(g.grupo)+'.xlsx');
   showToast('Nómina descargada','success');
 }
 function exportAttendancePDF() {
