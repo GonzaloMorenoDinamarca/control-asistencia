@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asistencia-v12';
+const CACHE_NAME = 'asistencia-v13';
 const ASSETS = [
   './',
   './index.html',
