@@ -187,6 +187,8 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
 .class-log-preview{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .class-log-preview.empty{color:var(--text3);font-style:italic}
 .class-log-edit{font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap}
+.nomina-btn{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--text);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:4px;flex-shrink:0;transition:all .15s}
+.nomina-btn:hover{background:var(--bg4);border-color:var(--border-l)}
 
 /* CALIFICACIONES */
 .grades-panel{display:flex;flex-direction:column;height:100%;padding:12px 14px;gap:10px;min-height:0}
@@ -402,10 +404,11 @@ td.td-num{color:var(--text3);font-family:'Space Mono',monospace;font-size:11px;w
         </div>
         <div id="classLogBar" class="class-log-bar" onclick="showClassLogModal()">
           <div style="font-size:18px;flex-shrink:0">📋</div>
-          <div class="class-log-text">
+          <div class="class-log-text" style="max-width:55%">
             <div class="class-log-label">Registro de la clase</div>
             <div id="classLogPreview" class="class-log-preview empty">Clic para agregar objetivo, temas o conceptos de la clase de hoy</div>
           </div>
+          <button class="nomina-btn" onclick="event.stopPropagation();exportNomina()" title="Descargar nómina de estudiantes en Excel">📋 Descargar Nómina</button>
           <div class="class-log-edit">Editar ›</div>
         </div>
         <div class="table-container">
@@ -1497,6 +1500,59 @@ function exportStatsPDF() {
   if(!w){showToast('Permite ventanas emergentes para exportar','error');return;}
   w.document.write(html);w.document.close();
   showToast('PDF de estad\u00edsticas listo','success');
+}
+function exportNomina() {
+  const g=getCurrentGroup();if(!g||!g.estudiantes.length){showToast('Sin estudiantes','error');return;}
+  const estudiantes=[...g.estudiantes].sort((a,b)=>{
+    const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;
+    const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;
+    return(a.am||'').localeCompare(b.am||'','es');
+  });
+  // XLS HTML with exact template formatting
+  // Header: bg #2C3E50, white text, bold, size 11, centered
+  // Data rows: alternating #FFFFFF / #EAF4FB, size 10
+  // All cells: thin border #BDC3C7
+  // Cols A(N°)=center, B(Ap.Pat)=left, C(Ap.Mat)=left, D(Nombres)=left, E(Curso)=center
+  const BDR='1px solid #BDC3C7';
+  const cellBase=`border:${BDR};font-family:Arial,sans-serif;vertical-align:middle;padding:3px 6px;`;
+  const hdCell=cellBase+'background:#2C3E50;color:#fff;font-weight:bold;font-size:11pt;text-align:center;height:22px;';
+  const mkRow=(i,e)=>{
+    const bg=i%2===0?'#FFFFFF':'#EAF4FB';
+    const dc=cellBase+'background:'+bg+';font-size:10pt;height:18px;';
+    const ctr=dc+'text-align:center;';const lft=dc+'text-align:left;';
+    return'<tr>'
+      +'<td style="'+ctr+'width:38px">'+(i+1)+'</td>'
+      +'<td style="'+lft+'width:140px">'+esc(e.ap)+'</td>'
+      +'<td style="'+lft+'width:140px">'+esc(e.am||'')+'</td>'
+      +'<td style="'+lft+'width:155px">'+esc(e.n)+'</td>'
+      +'<td style="'+ctr+'width:55px">'+esc(e.c)+'</td>'
+      +'</tr>';
+  };
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const rows=estudiantes.map((e,i)=>mkRow(i,e)).join('');
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml>
+<x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+<x:Name>Lista_Estudiantes</x:Name>
+<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><\/head>
+<body><table border="0" cellspacing="0" cellpadding="0">
+<colgroup><col width="38"/><col width="140"/><col width="140"/><col width="155"/><col width="55"/></colgroup>
+<thead><tr>
+<th style="${hdCell}width:38px">N° Lista</th>
+<th style="${hdCell}width:140px;text-align:center">Apellido Paterno</th>
+<th style="${hdCell}width:140px;text-align:center">Apellido Materno</th>
+<th style="${hdCell}width:155px;text-align:center">Nombre(s)</th>
+<th style="${hdCell}width:55px">Curso</th>
+</tr></thead>
+<tbody>${rows}</tbody>
+</table><\/body><\/html>`;
+  const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='Nomina_'+g.asignatura.replace(/[^a-zA-Z0-9]/g,'_')+'_'+g.grupo.replace(/[^a-zA-Z0-9]/g,'_')+'.xls';
+  a.click();URL.revokeObjectURL(a.href);
+  showToast('Nómina descargada','success');
 }
 function exportAttendancePDF() {
   const g=getCurrentGroup();if(!g||!g.estudiantes.length){showToast('Sin datos','error');return;}
