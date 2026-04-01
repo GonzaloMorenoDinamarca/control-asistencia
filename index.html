@@ -933,6 +933,14 @@ function getCalificaciones(group) {
   if (!group.calificaciones) group.calificaciones = { columns: [], data: {} };
   return group.calificaciones;
 }
+// Busca una nota por NOMBRE de columna en las calificaciones propias del estudiante.
+// Evita el bug de IDs de columna distintos entre grupos con el mismo nombre de eval.
+function getGradeVal(colName, studentId, cal) {
+  const col = cal.columns.find(c => c.name === colName);
+  if (!col) return null;
+  const v = (cal.data[studentId] || {})[col.id];
+  return v != null ? v : null;
+}
 function showAddGradeColModal() {
   if (!getCurrentGroup()) { showToast('Selecciona un grupo primero','error'); return; }
   document.getElementById('gradeColName').value = '';
@@ -974,6 +982,18 @@ function deleteGradeColumn(colId) {
   cal.columns = cal.columns.filter(c => c.id !== colId);
   Object.keys(cal.data).forEach(sid => delete cal.data[sid][colId]);
   saveData(); renderCalificaciones(); showToast('Eliminada','success');
+}
+function setGradeByName(studentId, colName, value) {
+  // Find the student's group and the correct column by name
+  const grp = state.groups.find(g => g.estudiantes.some(e => e.id === studentId));
+  if (!grp) return;
+  const cal = getCalificaciones(grp);
+  const col = cal.columns.find(c => c.name === colName);
+  if (!col) return;
+  const prevGroupId = state.currentGroupId;
+  state.currentGroupId = grp.id;
+  setGrade(studentId, col.id, value);
+  state.currentGroupId = prevGroupId;
 }
 function setGrade(studentId, colId, value) {
   const g = getCurrentGroup(); if (!g) return;
@@ -1053,8 +1073,8 @@ function renderCalificaciones() {
     const d = st._cal.data[st.id] || {};
     const grupoLabel = (st._grupo || '').replace(/grupo\s*/i,'').trim() || st._asignatura;
     html += `<tr><td class="td-num">${i+1}</td><td class="td-name td-apellidos">${escapeHtml(st.ap)}${st.am?' '+escapeHtml(st.am):''}</td><td class="td-name td-nombres">${escapeHtml(st.n)}</td><td class="td-name td-curso">${escapeHtml(st.c)}</td>${mostrarGrupo ? `<td class="td-name" style="font-size:12px;color:var(--purple);font-weight:600;white-space:nowrap">${escapeHtml(st._grupo||'')}</td>` : ''}`;
-    cols.forEach(col => { const val=d[col.id]; html+=`<td class="grade-cell"><input type="number" min="1" max="7" step="0.1" class="grade-input ${val!=null?gradeClass(val):''}" value="${val!=null?val:''}" placeholder="—" onchange="setGrade('${st.id}','${col.id}',this.value)" oninput="this.className='grade-input '+gradeClass(parseFloat(this.value)||0)" onfocus="this.select()"></td>`; });
-    const grades=cols.map(c=>d[c.id]).filter(v=>v!=null);
+    cols.forEach(col => { const val=getGradeVal(col.name,st.id,st._cal); html+=`<td class="grade-cell"><input type="number" min="1" max="7" step="0.1" class="grade-input ${val!=null?gradeClass(val):''}" value="${val!=null?val:''}" placeholder="—" onchange="setGradeByName('${st.id}','${escapeHtml(col.name)}',this.value)" oninput="this.className='grade-input '+gradeClass(parseFloat(this.value)||0)" onfocus="this.select()"></td>`; });
+    const grades=cols.map(c=>getGradeVal(c.name,st.id,st._cal)).filter(v=>v!=null);
     const avg=grades.length>0?grades.reduce((a,b)=>a+b,0)/grades.length:null;
     const avgStr=avg!=null?avg.toFixed(1):null;
     html+=`<td class="grade-cell td-promedio" id="prom-${st.id}">${avgStr?`<span class="grade-badge ${gradeClass(parseFloat(avgStr))}">${avgStr}</span>`:'<span class="grade-empty">—</span>'}</td></tr>`;
@@ -1081,8 +1101,7 @@ function exportGradesPDF() {
   const gColor=v=>{if(v==null||v==='')return'#94a3b8';const n=parseFloat(v);if(n>=6)return'#16a34a';if(n>=5)return'#2563eb';if(n>=4)return'#d97706';return'#dc2626';};
   let rows='';
   estudiantes.forEach((st,i)=>{
-    const d=st._cal.data[st.id]||{};
-    const grades=cols.map(c=>d[c.id]!=null?d[c.id]:null);
+    const grades=cols.map(c=>getGradeVal(c.name,st.id,st._cal));
     const valid=grades.filter(v=>v!=null).map(Number);
     const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):null;
     rows+='<tr class="'+(i%2===0?'':'alt')+'"><td class="n">'+(i+1)+'</td><td class="l"><b>'+esc(st.ap)+'</b> <span class="d">'+esc(st.am||'')+'</span></td><td>'+esc(st.n)+'</td><td class="c">'+esc(st.c)+'</td>'+(modoTodos?'<td class="c">'+esc(st._grupo)+'</td>':'')+grades.map(v=>'<td class="g" style="color:'+gColor(v)+'">'+( v!=null?v:'—')+'</td>').join('')+'<td class="g" style="color:'+gColor(avg)+';font-weight:800">'+(avg||'—')+'</td></tr>';
@@ -1104,7 +1123,7 @@ function exportGradesCSVFiltrado() {
   estudiantes.sort((a,b)=>{const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;const ac=(a.ap||'').localeCompare(b.ap||'','es');if(ac)return ac;return(a.am||'').localeCompare(b.am||'','es');});
   if(!estudiantes.length){showToast('Sin estudiantes con ese filtro','error');return;}
   let csv='#;Apellidos;Nombres;Curso;'+(modoTodos?'Grupo;':'')+cols.map(c=>'"'+c.name+'"').join(';')+';Promedio\n';
-  estudiantes.forEach((st,i)=>{const d=st._cal.data[st.id]||{};const grades=cols.map(c=>d[c.id]!=null?d[c.id]:'');const valid=grades.filter(v=>v!=='').map(Number);const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):'';const gc=modoTodos?'"'+(st._grupo||st._asignatura||'')+'";':'';csv+=(i+1)+';"'+st.ap+' '+(st.am||'')+'";"'+st.n+'";"'+st.c+'";'+gc+grades.map(v=>v===''?'':v).join(';')+';'+avg+'\n';});
+  estudiantes.forEach((st,i)=>{const grades=cols.map(c=>{const v=getGradeVal(c.name,st.id,st._cal);return v!=null?v:'';});const valid=grades.filter(v=>v!=='').map(Number);const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):'';const gc=modoTodos?'"'+(st._grupo||st._asignatura||'')+'";':'';csv+=(i+1)+';"'+st.ap+' '+(st.am||'')+'";"'+st.n+'";"'+st.c+'";'+gc+grades.map(v=>v===''?'':v).join(';')+';'+avg+'\n';});
   const sufijo=cursoFiltro?('_'+cursoFiltro.replace(/[^a-zA-Z0-9]/g,'')):(modoTodos?('_'+state.currentNivel+'medio_todos'):'');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='notas'+sufijo+'_'+localDateStr()+'.csv';a.click();
   showToast('CSV exportado: '+estudiantes.length+' estudiantes','success');
