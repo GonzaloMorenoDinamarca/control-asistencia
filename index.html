@@ -1150,12 +1150,12 @@ async function importGradesCSV(event) {
 // ═══════════════════════════════════════════════════════════
 function addStudentToGroup(ap,am,n,c) {
   const g=getCurrentGroup();if(!g){showToast('Selecciona un grupo primero','error');return;}
-  g.estudiantes.push({id:uid(),ap,am,n,c});saveData();updateAttendance();renderCalificaciones();showToast('Estudiante agregado','success');
+  g.estudiantes.push({id:uid(),ap,am,n,c});g.estudiantes.sort((a,b)=>{const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});saveData();updateAttendance();renderCalificaciones();showToast('Estudiante agregado','success');
 }
 function editStudentInGroup(studentId,ap,am,n,c) {
   const g=getCurrentGroup();if(!g)return;
   const st=g.estudiantes.find(s=>s.id===studentId);
-  if(st){st.ap=ap;st.am=am;st.n=n;st.c=c;saveData();updateAttendance();renderCalificaciones();showToast('Editado','success');}
+  if(st){st.ap=ap;st.am=am;st.n=n;st.c=c;g.estudiantes.sort((a,b)=>{const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;const ap=(a.ap||'').localeCompare(b.ap||'','es');if(ap)return ap;return(a.am||'').localeCompare(b.am||'','es');});saveData();updateAttendance();renderCalificaciones();showToast('Editado','success');}
 }
 function deleteStudentFromGroup(studentId) {
   if(!confirm('¿Eliminar este estudiante?'))return;
@@ -1647,10 +1647,10 @@ function updateDashboard() {
   el.innerHTML=html;
   if(window.chartInstances?.pie)window.chartInstances.pie.destroy();
   const pieCtx=document.getElementById('pieChart');
-  if(pieCtx)window.chartInstances.pie=new Chart(pieCtx,{type:'doughnut',data:{labels:['Presentes','Ausentes','Atrasos'],datasets:[{data:[tp,ta,tl],backgroundColor:['#34d399','#f87171','#fbbf24'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'var(--text)',font:{size:13}}}}}});
+  const _cs=getComputedStyle(document.documentElement);const _clr=v=>_cs.getPropertyValue(v).trim()||v;if(pieCtx)window.chartInstances.pie=new Chart(pieCtx,{type:'doughnut',data:{labels:['Presentes','Ausentes','Atrasos'],datasets:[{data:[tp,ta,tl],backgroundColor:['#34d399','#f87171','#fbbf24'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:_clr('--text'),font:{size:13},boxWidth:14,padding:16}}}}});
   if(window.chartInstances?.line)window.chartInstances.line.destroy();
   const lineCtx=document.getElementById('lineChart');
-  if(lineCtx){const dl=dates.slice(-10);const attPct=dl.map(d=>{const p=cg.estudiantes.filter(e=>getAtt(cg.id,e.id,d)==='present').length;return cg.estudiantes.length?Math.round(p/cg.estudiantes.length*100):0;});window.chartInstances.line=new Chart(lineCtx,{type:'line',data:{labels:dl.map(d=>new Date(d+'T12:00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'})),datasets:[{label:'Asistencia %',data:attPct,borderColor:'#4f8cff',backgroundColor:'rgba(79,140,255,.1)',borderWidth:2,fill:true,tension:.4,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'var(--text)',font:{size:12}}}},scales:{y:{min:0,max:100,ticks:{color:'var(--text3)',font:{size:11}},grid:{color:'var(--border)'}},x:{ticks:{color:'var(--text3)',font:{size:11}},grid:{color:'var(--border)'}}}}});}
+  if(lineCtx){const dl=dates.slice(-10);const attPct=dl.map(d=>{const p=cg.estudiantes.filter(e=>getAtt(cg.id,e.id,d)==='present').length;return cg.estudiantes.length?Math.round(p/cg.estudiantes.length*100):0;});window.chartInstances.line=new Chart(lineCtx,{type:'line',data:{labels:dl.map(d=>new Date(d+'T12:00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'})),datasets:[{label:'Asistencia %',data:attPct,borderColor:'#4f8cff',backgroundColor:'rgba(79,140,255,.1)',borderWidth:2,fill:true,tension:.4,pointRadius:4,pointBackgroundColor:'#4f8cff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:_clr('--text'),font:{size:12},boxWidth:14,padding:16}}},scales:{y:{min:0,max:100,ticks:{color:_clr('--text3'),font:{size:11}},grid:{color:_clr('--border')}},x:{ticks:{color:_clr('--text3'),font:{size:11}},grid:{color:_clr('--border')}}}}});}
 }
 
 // ═══════════════════════════════════════════════════════════
