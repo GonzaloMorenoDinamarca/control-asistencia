@@ -1893,7 +1893,15 @@ async function handleRestoreFile(event) {
 }
 
 function toggleTheme(){state.theme=state.theme==='dark'?'light':'dark';setTheme(state.theme);saveData();}
-function setTheme(theme){document.documentElement.setAttribute('data-theme',theme);const btn=document.getElementById('themeBtn');if(btn)btn.textContent=theme==='dark'?'☀️':'🌙';}
+function setTheme(theme){
+  document.documentElement.setAttribute('data-theme',theme);
+  const btn=document.getElementById('themeBtn');
+  if(btn)btn.textContent=theme==='dark'?'☀️':'🌙';
+  // Re-renderizar gráficos si la vista estadísticas está activa,
+  // para que los colores del texto de la leyenda se actualicen con el nuevo tema
+  const statsView=document.getElementById('estadisticasView');
+  if(statsView&&statsView.classList.contains('active'))renderStats();
+}
 
 // ═══════════════════════════════════════════════════════════
 //  MODALES ESTUDIANTE
