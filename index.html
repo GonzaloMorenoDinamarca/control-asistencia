@@ -631,6 +631,16 @@ let currentUser = null;
 let isLocalMode = false;
 let _saveTimer  = null;
 
+// -- Proteccion contra sobrescritura destructiva ---------------------
+// cloudLoadOk: solo se escribe en Supabase si antes se pudo LEER. Si la
+//   lectura falla (token caducado, red, RLS), cloudState seria null, la app
+//   arrancaria vacia y el primer clic borraria los datos de la nube.
+// cloudHadGroups: si la nube tenia datos, nunca se sube un estado vacio,
+//   salvo que el borrado sea deliberado (allowDestructive).
+let cloudLoadOk      = false;
+let cloudHadGroups   = false;
+let allowDestructive = false;
+
 // ═══════════════════════════════════════════════════════════
 //  UTILIDADES UI
 // ═══════════════════════════════════════════════════════════
@@ -825,13 +835,25 @@ function loadLocalStorage() {
 }
 
 // Guardar en localStorage DE INMEDIATO + Supabase en background
+// Decide si es seguro escribir en Supabase. Ver banderas arriba.
+function canSyncToCloud() {
+  if (!cloudLoadOk) { console.warn('Sync bloqueado: no se pudo leer la nube al iniciar.'); return false; }
+  if (state.groups.length === 0 && cloudHadGroups && !allowDestructive) {
+    console.warn('Sync bloqueado: se evito subir un estado vacio sobre datos existentes.');
+    showToast('Proteccion: tus datos en la nube NO se sobrescribieron', 'error');
+    return false;
+  }
+  cloudHadGroups = state.groups.length > 0;
+  return true;
+}
+
 function saveData() {
   // 1) localStorage — instantáneo, nunca falla
   try{const _t=new Date().toISOString();localStorage.setItem('asistenciaState',JSON.stringify(state));localStorage.setItem('asistenciaStateUpdatedAt',_t);}catch(e){}
   showSaveIndicator();
 
   // 2) Supabase — con debounce de 800ms para no saturar
-  if (!isLocalMode && currentUser && sbClient) {
+  if (!isLocalMode && currentUser && sbClient && canSyncToCloud()) {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(async () => {
       try {
@@ -854,7 +876,7 @@ async function saveDataNow() {
   showSaveIndicator();
 
   // 2) Supabase inmediato
-  if (!isLocalMode && currentUser && sbClient) {
+  if (!isLocalMode && currentUser && sbClient && canSyncToCloud()) {
     try {
       const { error } = await sbClient.from('app_data').upsert({
         id: currentUser.id,
@@ -879,11 +901,16 @@ async function startCloudMode(user) {
   if (badge) { badge.classList.remove('local'); document.getElementById('userEmailText').textContent = user.email; }
 
   // Siempre consultar Supabase al iniciar sesión — fuente de verdad compartida.
-  let cloudState=null,cloudUpdatedAt=null;
+  let cloudState=null,cloudUpdatedAt=null,cloudReadFailed=false;
   try {
     const{data,error}=await sbClient.from('app_data').select('state,updated_at').eq('id',user.id).single();
-    if(!error&&data&&validateState(data.state)){cloudState=data.state;cloudUpdatedAt=data.updated_at?new Date(data.updated_at):null;}
-  } catch(e){console.warn('Error consultando Supabase:',e);}
+    // PGRST116 = aun no hay fila: cuenta nueva, no es un fallo.
+    if(error&&error.code!=='PGRST116'){cloudReadFailed=true;console.warn('Error leyendo Supabase:',error.message);}
+    else if(data&&validateState(data.state)){cloudState=data.state;cloudUpdatedAt=data.updated_at?new Date(data.updated_at):null;}
+  } catch(e){cloudReadFailed=true;console.warn('Error consultando Supabase:',e);}
+  cloudLoadOk=!cloudReadFailed;
+  cloudHadGroups=!!(cloudState&&cloudState.groups&&cloudState.groups.length>0);
+  if(cloudReadFailed){showToast('No se pudieron leer tus datos de la nube. No se guardara nada para no borrarlos: recarga la pagina.','error');}
   const hayLocal=loadLocalStorage();
   let localUpdatedAt=null;
   try{const m=localStorage.getItem('asistenciaStateUpdatedAt');if(m)localUpdatedAt=new Date(m);}catch(e){}
@@ -1169,7 +1196,8 @@ function deleteCurrentGroup() {
   const g=getCurrentGroup();if(!g)return;
   if(!confirm(`¿Eliminar "${g.asignatura} - ${g.grupo}" y todos sus datos?`))return;
   state.groups=state.groups.filter(gr=>gr.id!==g.id);state.currentGroupId=null;state.currentNivel=null;
-  saveData();updateUI();showToast('Asignatura eliminada','success');
+  allowDestructive=true;saveData();allowDestructive=false;
+  updateUI();showToast('Asignatura eliminada','success');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1881,9 +1909,11 @@ async function handleRestoreFile(event) {
     state = backup.state;
     state.currentDate = localDateStr(); // Siempre fecha de hoy
 
-    // Guardar en localStorage y Supabase
+    // Guardar en localStorage y Supabase (restauracion deliberada)
+    allowDestructive = true;
     await saveDataNow();
     updateUI();
+    allowDestructive = false;
     showToast(`✓ Backup restaurado: ${nGrupos} grupos`, 'success');
 
   } catch(e) {
