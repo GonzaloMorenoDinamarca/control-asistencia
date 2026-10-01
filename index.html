@@ -962,6 +962,20 @@ function getCalificaciones(group) {
 }
 // Busca una nota por NOMBRE de columna en las calificaciones propias del estudiante.
 // Evita el bug de IDs de columna distintos entre grupos con el mismo nombre de eval.
+// Compara nombres de columna entre grupos ignorando mayusculas, tildes y
+// espacios de sobra. Sin esto "TALLER EVALUADO" y "Taller Evaluado" se
+// tratan como columnas distintas y la nota se pierde EN SILENCIO al editar
+// desde la vista "todos los cursos".
+function normNombre(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function buscarColumna(cal, colName) {
+  const n = normNombre(colName);
+  return cal.columns.find(c => c.name === colName)
+      || cal.columns.find(c => normNombre(c.name) === n) || null;
+}
+
 // Columnas visibles en la tabla de notas; updatePromedio usa esta misma base
 // para que el promedio al escribir coincida con el que se pinta al cargar.
 let _colsMostradas = [];
@@ -977,7 +991,7 @@ function promedioDe(valores) {
 }
 
 function getGradeVal(colName, studentId, cal) {
-  const col = cal.columns.find(c => c.name === colName);
+  const col = buscarColumna(cal, colName);
   if (!col) return null;
   const v = (cal.data[studentId] || {})[col.id];
   return v != null ? v : null;
@@ -1029,8 +1043,11 @@ function setGradeByName(studentId, colName, value) {
   const grp = state.groups.find(g => g.estudiantes.some(e => e.id === studentId));
   if (!grp) return;
   const cal = getCalificaciones(grp);
-  const col = cal.columns.find(c => c.name === colName);
-  if (!col) return;
+  const col = buscarColumna(cal, colName);
+  if (!col) {
+    showToast('"' + (grp.grupo || grp.asignatura) + '" no tiene la columna "' + colName + '". Renombrala para que coincida.', 'error');
+    return;
+  }
   const prevGroupId = state.currentGroupId;
   state.currentGroupId = grp.id;
   setGrade(studentId, col.id, value);
@@ -1176,11 +1193,11 @@ async function importGradesCSV(event) {
     const text=await file.text();const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);if(lines.length<2){showToast('CSV vacío','error');return;}
     const sep=lines[0].includes(';')?';':',';const headers=lines[0].split(sep).map(h=>h.replace(/^"|"$/g,'').trim());
     const gradeHeaders=headers.slice(4,headers.length-1);const cal=getCalificaciones(g);
-    gradeHeaders.forEach(name=>{if(!cal.columns.find(c=>c.name===name))cal.columns.push({id:uid(),name,date:''});});
+    gradeHeaders.forEach(name=>{if(!cal.buscarColumna(cal,name))cal.columns.push({id:uid(),name,date:''});});
     for(let i=1;i<lines.length;i++){const cols=lines[i].split(sep).map(c=>c.replace(/^"|"$/g,'').trim());if(cols.length<4)continue;
       const st=g.estudiantes.find(s=>`${s.ap} ${s.am||''}`.trim().toLowerCase()===cols[1].toLowerCase()&&s.n.toLowerCase()===cols[2].toLowerCase());
       if(!st)continue;if(!cal.data[st.id])cal.data[st.id]={};
-      gradeHeaders.forEach((name,j)=>{const col=cal.columns.find(c=>c.name===name);if(!col)return;const val=parseFloat(cols[4+j]);if(!isNaN(val)&&val>=1&&val<=7)cal.data[st.id][col.id]=Math.round(val*10)/10;});}
+      gradeHeaders.forEach((name,j)=>{const col=cal.buscarColumna(cal,name);if(!col)return;const val=parseFloat(cols[4+j]);if(!isNaN(val)&&val>=1&&val<=7)cal.data[st.id][col.id]=Math.round(val*10)/10;});}
     saveData();renderCalificaciones();showToast('Notas importadas','success');
   } catch(e){showToast('Error: '+e.message,'error');}
   event.target.value='';
