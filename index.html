@@ -962,6 +962,20 @@ function getCalificaciones(group) {
 }
 // Busca una nota por NOMBRE de columna en las calificaciones propias del estudiante.
 // Evita el bug de IDs de columna distintos entre grupos con el mismo nombre de eval.
+// Columnas visibles en la tabla de notas; updatePromedio usa esta misma base
+// para que el promedio al escribir coincida con el que se pinta al cargar.
+let _colsMostradas = [];
+
+// UNICO punto de calculo del promedio. Trabaja en decimas enteras porque
+// en coma flotante 26.2/4 vale 6.5499999..., y (6.55).toFixed(1) da "6.5"
+// en vez de "6.6". Sumando decimas enteras el redondeo es exacto.
+function promedioDe(valores) {
+  const v = valores.filter(x => x != null && !isNaN(x));
+  if (!v.length) return null;
+  const decimas = v.reduce((a, b) => a + Math.round(b * 10), 0);
+  return Math.round(decimas / v.length) / 10;
+}
+
 function getGradeVal(colName, studentId, cal) {
   const col = cal.columns.find(c => c.name === colName);
   if (!col) return null;
@@ -1037,10 +1051,10 @@ function setGrade(studentId, colId, value) {
   updatePromedio(studentId); debouncedSave();
 }
 function updatePromedio(studentId) {
-  const g = getCurrentGroup(); if (!g) return;
-  const cal = getCalificaciones(g);
-  const grades = cal.columns.map(c => cal.data[studentId]?.[c.id]).filter(v => v != null);
-  const avg = grades.length > 0 ? grades.reduce((a,b)=>a+b,0)/grades.length : null;
+  const grp = state.groups.find(g => g.estudiantes.some(e => e.id === studentId));
+  if (!grp) return;
+  const cal = getCalificaciones(grp);
+  const avg = promedioDe(_colsMostradas.map(n => getGradeVal(n, studentId, cal)));
   const cell = document.getElementById(`prom-${studentId}`);
   if (cell) cell.innerHTML = avg != null
     ? `<span class="grade-badge ${gradeClass(avg)}">${avg.toFixed(1)}</span>`
@@ -1069,6 +1083,7 @@ function renderCalificaciones() {
   const g = getCurrentGroup() || grupos[0];
   const cal = getCalificaciones(g);
   const cols = cal.columns;
+  _colsMostradas = cols.map(c => c.name);
   let todos = grupos.flatMap(gr => getEstudiantesConGrupo(gr, cursoFiltro));
   todos.sort((a,b) => { const cc=(a.c||'').localeCompare(b.c||'','es'); if(cc)return cc; const ac=(a.ap||'').localeCompare(b.ap||'','es'); if(ac)return ac; return (a.am||'').localeCompare(b.am||'','es'); });
   if (!todos.length) { wrapper.innerHTML='<div class="empty-state"><h3>Sin estudiantes</h3></div>'; return; }
@@ -1100,9 +1115,8 @@ function renderCalificaciones() {
     const d = st._cal.data[st.id] || {};
     const grupoLabel = (st._grupo || '').replace(/grupo\s*/i,'').trim() || st._asignatura;
     html += `<tr><td class="td-num">${i+1}</td><td class="td-name td-apellidos">${escapeHtml(st.ap)}${st.am?' '+escapeHtml(st.am):''}</td><td class="td-name td-nombres">${escapeHtml(st.n)}</td><td class="td-name td-curso">${escapeHtml(st.c)}</td>${mostrarGrupo ? `<td class="td-name" style="font-size:12px;color:var(--purple);font-weight:600;white-space:nowrap">${escapeHtml(st._grupo||'')}</td>` : ''}`;
-    cols.forEach(col => { const val=getGradeVal(col.name,st.id,st._cal); html+=`<td class="grade-cell"><input type="number" min="1" max="7" step="0.1" class="grade-input ${val!=null?gradeClass(val):''}" value="${val!=null?val:''}" placeholder="—" onchange="setGradeByName('${st.id}','${escapeHtml(col.name)}',this.value)" oninput="this.className='grade-input '+gradeClass(parseFloat(this.value)||0)" onfocus="this.select()"></td>`; });
-    const grades=cols.map(c=>getGradeVal(c.name,st.id,st._cal)).filter(v=>v!=null);
-    const avg=grades.length>0?grades.reduce((a,b)=>a+b,0)/grades.length:null;
+    cols.forEach(col => { const val=getGradeVal(col.name,st.id,st._cal); html+=`<td class="grade-cell"><input type="number" min="1" max="7" step="0.1" class="grade-input ${val!=null?gradeClass(val):''}" value="${val!=null?val:''}" placeholder="—" onchange="setGradeByName('${st.id}','${escapeHtml(col.name)}',this.value)" oninput="this.className='grade-input '+gradeClass(parseFloat(this.value)||0);setGradeByName('${st.id}','${escapeHtml(col.name)}',this.value)" onfocus="this.select()"></td>`; });
+    const avg=promedioDe(cols.map(c=>getGradeVal(c.name,st.id,st._cal)));
     const avgStr=avg!=null?avg.toFixed(1):null;
     html+=`<td class="grade-cell td-promedio" id="prom-${st.id}">${avgStr?`<span class="grade-badge ${gradeClass(parseFloat(avgStr))}">${avgStr}</span>`:'<span class="grade-empty">—</span>'}</td></tr>`;
   });
@@ -1130,7 +1144,7 @@ function exportGradesPDF() {
   estudiantes.forEach((st,i)=>{
     const grades=cols.map(c=>getGradeVal(c.name,st.id,st._cal));
     const valid=grades.filter(v=>v!=null).map(Number);
-    const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):null;
+    const _p=promedioDe(valid);const avg=_p!=null?_p.toFixed(1):null;
     rows+='<tr class="'+(i%2===0?'':'alt')+'"><td class="n">'+(i+1)+'</td><td class="l"><b>'+esc(st.ap)+'</b> <span class="d">'+esc(st.am||'')+'</span></td><td>'+esc(st.n)+'</td><td class="c">'+esc(st.c)+'</td>'+(modoTodos?'<td class="c">'+esc(st._grupo)+'</td>':'')+grades.map(v=>'<td class="g" style="color:'+gColor(v)+'">'+( v!=null?v:'—')+'</td>').join('')+'<td class="g" style="color:'+gColor(avg)+';font-weight:800">'+(avg||'—')+'</td></tr>';
   });
   const css='@page{size:A4 landscape;margin:13mm 15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:9pt;color:#1e293b}.hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:11px;padding-bottom:9px;border-bottom:2.5px solid #1e40af}.ht{font-size:13pt;font-weight:800;color:#1e40af}.hs{font-size:8pt;color:#64748b;margin-top:2px}.hr{text-align:right;font-size:8pt;color:#64748b;line-height:1.6}.fb{background:#f1f5f9;border-radius:4px;padding:4px 10px;font-size:7.5pt;color:#475569;margin-bottom:10px;display:flex;justify-content:space-between}.fb strong{color:#1e40af}table{width:100%;border-collapse:collapse}th{background:#1e40af;color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;padding:6px 7px;text-align:center}th.l{text-align:left}td{padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle}tr.alt td{background:#f8fafc}.n{text-align:center;font-size:8pt;color:#94a3b8;width:24px}.l{font-size:8.5pt;min-width:130px}.c{text-align:center;font-size:8pt;color:#7c3aed;font-weight:700;width:50px}.g{text-align:center;font-size:9pt;width:42px;font-weight:700}.d{font-weight:400;color:#94a3b8}.ftr{margin-top:11px;padding-top:7px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8}.pb{display:inline-flex;align-items:center;gap:6px;background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;margin-bottom:14px}@media print{.np{display:none}tr{page-break-inside:avoid}}';
@@ -1150,7 +1164,7 @@ function exportGradesCSVFiltrado() {
   estudiantes.sort((a,b)=>{const cc=(a.c||'').localeCompare(b.c||'','es');if(cc)return cc;const ac=(a.ap||'').localeCompare(b.ap||'','es');if(ac)return ac;return(a.am||'').localeCompare(b.am||'','es');});
   if(!estudiantes.length){showToast('Sin estudiantes con ese filtro','error');return;}
   let csv='#;Apellidos;Nombres;Curso;'+(modoTodos?'Grupo;':'')+cols.map(c=>'"'+c.name+'"').join(';')+';Promedio\n';
-  estudiantes.forEach((st,i)=>{const grades=cols.map(c=>{const v=getGradeVal(c.name,st.id,st._cal);return v!=null?v:'';});const valid=grades.filter(v=>v!=='').map(Number);const avg=valid.length>0?(valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1):'';const gc=modoTodos?'"'+(st._grupo||st._asignatura||'')+'";':'';csv+=(i+1)+';"'+st.ap+' '+(st.am||'')+'";"'+st.n+'";"'+st.c+'";'+gc+grades.map(v=>v===''?'':v).join(';')+';'+avg+'\n';});
+  estudiantes.forEach((st,i)=>{const grades=cols.map(c=>{const v=getGradeVal(c.name,st.id,st._cal);return v!=null?v:'';});const valid=grades.filter(v=>v!=='').map(Number);const _p=promedioDe(valid);const avg=_p!=null?_p.toFixed(1):'';const gc=modoTodos?'"'+(st._grupo||st._asignatura||'')+'";':'';csv+=(i+1)+';"'+st.ap+' '+(st.am||'')+'";"'+st.n+'";"'+st.c+'";'+gc+grades.map(v=>v===''?'':v).join(';')+';'+avg+'\n';});
   const sufijo=cursoFiltro?('_'+cursoFiltro.replace(/[^a-zA-Z0-9]/g,'')):(modoTodos?('_'+state.currentNivel+'medio_todos'):'');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='notas'+sufijo+'_'+localDateStr()+'.csv';a.click();
   showToast('CSV exportado: '+estudiantes.length+' estudiantes','success');
@@ -1476,7 +1490,7 @@ function getStudentStats(g) {
     dates.forEach(d=>{const s=getAtt(g.id,st.id,d);if(s==='present')present++;else if(s==='absent')absent++;else if(s==='late')late++;if(s)recorded++;});
     const pct=recorded>0?Math.round((present/recorded)*100):0;
     const cal=g.calificaciones;let notaPromedio=null;
-    if(cal?.columns?.length&&cal.data?.[st.id]){const vals=cal.columns.map(c=>cal.data[st.id][c.id]).filter(v=>v!=null);if(vals.length)notaPromedio=(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);}
+    if(cal?.columns?.length&&cal.data?.[st.id]){const vals=cal.columns.map(c=>cal.data[st.id][c.id]).filter(v=>v!=null);if(vals.length){const _p=promedioDe(vals);notaPromedio=_p!=null?_p.toFixed(1):null;}}
     return{...st,present,absent,late,recorded,pct,notaPromedio};
   });
 }
