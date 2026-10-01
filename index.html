@@ -1874,11 +1874,16 @@ function downloadBackup() {
 }
 
 function triggerRestore() {
-  if (!confirm('⚠️ ¿Restaurar backup?\n\nEsto reemplazará TODOS los datos actuales con los del archivo de backup.\n\n¿Estás seguro?')) return;
+  // El selector de archivos debe abrirse dentro del MISMO gesto del usuario.
+  // Un confirm() previo consume la activacion y el navegador bloquea el
+  // dialogo en silencio. La confirmacion real esta en handleRestoreFile, que
+  // ademas indica la fecha y el numero de grupos del backup elegido.
   const inp = document.createElement('input');
   inp.type = 'file';
-  inp.accept = '.json';
-  inp.onchange = handleRestoreFile;
+  inp.accept = '.json,application/json';
+  inp.style.display = 'none';
+  inp.onchange = (e) => { handleRestoreFile(e); setTimeout(() => inp.remove(), 0); };
+  document.body.appendChild(inp);
   inp.click();
 }
 
